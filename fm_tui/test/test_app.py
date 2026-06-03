@@ -1,4 +1,4 @@
-"""fm_tui app tests: it mounts and composes its panels headless, bare of nish-tui."""
+"""fm_tui app tests: it mounts and composes its panels headless, themed or bare."""
 
 import asyncio
 
@@ -15,11 +15,3 @@ def test_app_mounts_all_panels():
             assert app.query_one("#rosout") is not None
 
     asyncio.run(go())
-
-
-def test_app_uses_fallback_widgets_when_nish_tui_absent():
-    # Step 6 wires the plain twins directly, so the app never imports nish-tui.
-    import fm_tui.app as app_module
-
-    assert app_module.Header.__module__ == "fm_tui.widgets"
-    assert app_module.LogView.__module__ == "fm_tui.widgets"

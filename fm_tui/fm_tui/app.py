@@ -22,9 +22,10 @@ from textual.app import App, ComposeResult
 from textual.containers import Horizontal
 from textual.widgets import Footer, Static
 
-from fm_tui.widgets import BorderedPanel, Header, LogView
+from fm_tui.theme import BorderedPanel, Header, LogView, apply_theme
 
 
+@apply_theme
 class FmTuiApp(App):
     """The fm_tui monitor application."""
 
