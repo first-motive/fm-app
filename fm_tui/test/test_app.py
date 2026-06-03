@@ -7,7 +7,7 @@ from fm_tui.app import FmTuiApp
 
 def test_app_mounts_all_panels():
     async def go():
-        async with FmTuiApp().run_test() as pilot:
+        async with FmTuiApp(connect_ros=False).run_test() as pilot:
             await pilot.pause()
             app = pilot.app
             assert app.query_one("#nodes") is not None
