@@ -20,6 +20,7 @@ setup(
     entry_points={
         "console_scripts": [
             "fm_tui = fm_tui.app:main",
+            "fm_tui_launcher = fm_tui.launcher:main",
         ],
     },
 )
