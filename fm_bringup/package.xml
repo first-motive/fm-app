@@ -15,6 +15,12 @@
   <exec_depend>fm_control</exec_depend>
   <exec_depend>fm_orchestration</exec_depend>
 
+  <!-- ros2_control runtime: controller_manager + the controllers the bringup spawns. -->
+  <exec_depend>controller_manager</exec_depend>
+  <exec_depend>joint_state_broadcaster</exec_depend>
+  <exec_depend>joint_trajectory_controller</exec_depend>
+  <exec_depend>forward_command_controller</exec_depend>
+
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
   <test_depend>ament_pep257</test_depend>
