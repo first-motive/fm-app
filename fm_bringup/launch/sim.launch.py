@@ -129,8 +129,11 @@ def _launch_setup(context, *args, **kwargs):
             )
         )
     elif sim_backend in ("mujoco", "gazebo", "isaac"):
-        backend_args = {"robot_description": robot_description}
-        if sim_backend != "gazebo":
+        # Gazebo spawns from the /robot_description topic (robot_state_publisher
+        # above), so it needs no description passed; mujoco/isaac take it as a param.
+        backend_args = {}
+        if sim_backend in ("mujoco", "isaac"):
+            backend_args["robot_description"] = robot_description
             backend_args["controllers_file"] = controllers_file
         nodes.append(
             IncludeLaunchDescription(
