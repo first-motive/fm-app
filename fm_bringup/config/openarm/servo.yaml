@@ -28,7 +28,9 @@ moveit_servo:
 
   move_group_name: right_arm
   planning_frame: openarm_right_base_link
-  ee_frame_name: openarm_right_ee_base_link
+  # Arm tip — the right_arm preset has no gripper/EE link, and link7 exists in every
+  # preset, so this resolves for both right_arm and default_bimanual.
+  ee_frame_name: openarm_right_link7
   robot_link_command_frame: openarm_right_base_link
 
   incoming_command_timeout: 0.1

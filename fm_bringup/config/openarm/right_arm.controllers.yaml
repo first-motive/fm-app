@@ -7,7 +7,7 @@
 # openarm_right_joint1..7.
 controller_manager:
   ros__parameters:
-    update_rate: 200  # Hz
+    update_rate: 100  # Hz — software-GL MuJoCo on a headless Mac cannot hold 200
 
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster

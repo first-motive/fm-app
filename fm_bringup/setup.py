@@ -16,7 +16,10 @@ setup(
             "share/" + package_name + "/launch/sim_backends",
             glob("launch/sim_backends/*.launch.py"),
         ),
-        ("share/" + package_name + "/config/openarm", glob("config/openarm/*.yaml")),
+        (
+            "share/" + package_name + "/config/openarm",
+            glob("config/openarm/*.yaml") + glob("config/openarm/*.srdf"),
+        ),
     ],
     install_requires=["setuptools"],
     zip_safe=True,

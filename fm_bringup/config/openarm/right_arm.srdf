@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Single-arm SRDF for the OpenArm right_arm preset.
+
+MoveIt Servo needs an SRDF whose joints match the loaded model exactly, or the
+planning scene monitor waits forever for the missing joints ("complete state not
+known"). The vendored openarm_bimanual.srdf references both arms + grippers, which
+the right_arm preset does not have — so Servo against it never completes. This trims
+to the right arm only: 7 joints, base attached to world, no gripper/EE, no body.
+
+Mirrors the bimanual config's right-arm group, group_state, and adjacent-link
+collision disables. Robot name openarm_v20 matches the description so MoveIt accepts
+the pair.
+-->
+<robot name="openarm_v20">
+    <group name="right_arm">
+        <joint name="openarm_right_joint1"/>
+        <joint name="openarm_right_joint2"/>
+        <joint name="openarm_right_joint3"/>
+        <joint name="openarm_right_joint4"/>
+        <joint name="openarm_right_joint5"/>
+        <joint name="openarm_right_joint6"/>
+        <joint name="openarm_right_joint7"/>
+    </group>
+
+    <group_state name="home" group="right_arm">
+        <joint name="openarm_right_joint1" value="0"/>
+        <joint name="openarm_right_joint2" value="0"/>
+        <joint name="openarm_right_joint3" value="0"/>
+        <joint name="openarm_right_joint4" value="0"/>
+        <joint name="openarm_right_joint5" value="0"/>
+        <joint name="openarm_right_joint6" value="0"/>
+        <joint name="openarm_right_joint7" value="0"/>
+    </group_state>
+
+    <disable_collisions link1="openarm_right_base_link" link2="openarm_right_link1" reason="Adjacent"/>
+    <disable_collisions link1="openarm_right_link1" link2="openarm_right_link2" reason="Adjacent"/>
+    <disable_collisions link1="openarm_right_link2" link2="openarm_right_link3" reason="Adjacent"/>
+    <disable_collisions link1="openarm_right_link3" link2="openarm_right_link4" reason="Adjacent"/>
+    <disable_collisions link1="openarm_right_link4" link2="openarm_right_link5" reason="Adjacent"/>
+    <disable_collisions link1="openarm_right_link5" link2="openarm_right_link6" reason="Adjacent"/>
+    <disable_collisions link1="openarm_right_link6" link2="openarm_right_link7" reason="Adjacent"/>
+</robot>
