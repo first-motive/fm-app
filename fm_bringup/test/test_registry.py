@@ -100,5 +100,13 @@ def test_g1_d_moveit_config_in_repo():
     assert spec.semantic("g1_d")  # resolves the in-repo SRDF without error
 
 
+def test_full_state_jsp_only_for_subset_controlled_g1():
+    # The G1-D drives 7 of 34 joints, so it needs the joint_state_publisher; the
+    # OpenArm + SO101 control their whole model and must not.
+    assert registry.get("g1_d").full_state_jsp is True
+    assert registry.get("openarm").full_state_jsp is False
+    assert registry.get("so101").full_state_jsp is False
+
+
 def test_registered_robots():
     assert {"openarm", "so101", "g1_d"} <= set(registry._ROBOTS)

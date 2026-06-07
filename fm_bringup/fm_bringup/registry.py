@@ -92,6 +92,13 @@ class RobotSpec:
     bringup_srdf: dict  # variant -> SRDF filename under config/<config_dir>
     moveit_srdf: str  # fallback SRDF filename in the MoveIt config package
 
+    # When the controllers drive only a SUBSET of the model's joints (the G1-D arm is
+    # 7 of 34), the unactuated joints never reach /joint_states, so MoveIt's planning
+    # scene monitor never completes ("complete state not known") and Servo will not jog.
+    # True adds a joint_state_publisher that fills those joints at their default while
+    # taking the controlled joints from the broadcaster via source_list.
+    full_state_jsp: bool = False
+
     # --- path helpers --------------------------------------------------------
 
     def _config(self, *parts):
@@ -232,6 +239,9 @@ _ROBOTS = {
         servo_config="servo.yaml",
         bringup_srdf={"g1_d": "g1_d.srdf"},
         moveit_srdf="g1_d.srdf",
+        # Servo drives 7 of the G1-D's 34 joints; fill the rest so the planning scene
+        # completes (see full_state_jsp above).
+        full_state_jsp=True,
     ),
 }
 

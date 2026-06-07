@@ -37,8 +37,14 @@ moveit_servo:
   joint_command_in_topic: ~/delta_joint_cmds
   command_out_topic: /g1_right_arm_controller/joint_trajectory
 
-  # Collision + singularity safety — Servo slows near both.
-  check_collisions: true
+  # Collision checking is OFF for the G1-D. Servo monitors the WHOLE model (34 joints),
+  # but only the right arm is controlled; the static body — including the multi-link
+  # right hand — sits in constant self-contact at its default pose (adjacent finger
+  # segments touch), which floods Servo with collision warnings that no arm motion can
+  # clear. A full SRDF collision matrix (MoveIt setup-assistant scale) is out of scope;
+  # the arm jogs in free space, and the real arm runs through the arm_sdk bridge, not
+  # this collision-checked path. Singularity slowdown below still applies.
+  check_collisions: false
   collision_check_rate: 10.0
   self_collision_proximity_threshold: 0.01
   scene_collision_proximity_threshold: 0.02

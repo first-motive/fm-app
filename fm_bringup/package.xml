@@ -13,6 +13,8 @@
   <exec_depend>launch_ros</exec_depend>
   <!-- registry.py processes the backend-selectable xacro into robot_description. -->
   <exec_depend>xacro</exec_depend>
+  <!-- Fills unactuated joints for subset-controlled robots (the G1-D arm). -->
+  <exec_depend>joint_state_publisher</exec_depend>
   <exec_depend>foxglove_bridge</exec_depend>
   <exec_depend>fm_control</exec_depend>
   <exec_depend>fm_orchestration</exec_depend>

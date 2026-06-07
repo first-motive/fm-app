@@ -62,6 +62,27 @@ def _launch_setup(context, *args, **kwargs):
         ),
     ]
 
+    # Robots whose controllers drive only a subset of the model (the G1-D arm) need a
+    # joint_state_publisher to fill the unactuated joints, or Servo's planning scene
+    # never completes. source_list takes the controlled joints from the broadcaster's
+    # /joint_states; the rest publish at their URDF default.
+    if spec.full_state_jsp:
+        nodes.append(
+            Node(
+                package="joint_state_publisher",
+                executable="joint_state_publisher",
+                name="joint_state_publisher",
+                output="screen",
+                parameters=[
+                    {
+                        "robot_description": robot_description,
+                        "source_list": ["/joint_states"],
+                        "rate": 30,
+                    }
+                ],
+            )
+        )
+
     # Backend that hosts the controller_manager.
     backends_dir = os.path.join(
         get_package_share_directory("fm_bringup"), "launch", "sim_backends"
