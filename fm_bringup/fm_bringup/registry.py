@@ -102,6 +102,11 @@ class RobotSpec:
     # cmd_vel_unstamped -> /cmd_vel). Empty for robots that need no remap.
     cmd_remaps: tuple = ()
 
+    # Extra teleop adapter nodes launched alongside Servo for the panel, as
+    # ((package, executable), ...). The G1-D runs g1_hand_teleop to map the panel's hand
+    # presets/sliders onto the hand controllers. Empty for arm-only robots.
+    teleop_nodes: tuple = ()
+
     # When the controllers drive only a SUBSET of the model's joints (the G1-D arm is
     # 7 of 34), the unactuated joints never reach /joint_states, so MoveIt's planning
     # scene monitor never completes ("complete state not known") and Servo will not jog.
@@ -257,6 +262,8 @@ _ROBOTS = {
         # diff_drive_controller subscribes ~/cmd_vel_unstamped; remap it to the canonical
         # /cmd_vel so the panel + g1_base_teleop share one base topic across sim and real.
         cmd_remaps=(("/g1_base_controller/cmd_vel_unstamped", "/cmd_vel"),),
+        # Panel hand presets/sliders -> hand controllers via the hand teleop adapter.
+        teleop_nodes=(("fm_bringup", "g1_hand_teleop"),),
         # Only mock needs a standalone controller_manager; mujoco/gazebo/isaac host
         # their own. real is NOT here — the G1 has no ros2_control hardware interface,
         # so the real arm is driven by the Servo->arm_sdk bridge (g1_arm_sdk_bridge),

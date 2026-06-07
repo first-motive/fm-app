@@ -106,6 +106,16 @@ def test_single_arm_robots_have_no_cmd_remaps():
     assert registry.get("so101").cmd_remaps == ()
 
 
+def test_g1_d_teleop_nodes_include_hand_teleop():
+    spec = registry.get("g1_d")
+    assert spec.teleop_nodes == (("fm_bringup", "g1_hand_teleop"),)
+
+
+def test_single_arm_robots_have_no_teleop_nodes():
+    assert registry.get("openarm").teleop_nodes == ()
+    assert registry.get("so101").teleop_nodes == ()
+
+
 def test_g1_d_servo_nodes_one_per_arm():
     # Right arm on the primary servo_node, left arm on servo_node_left.
     spec = registry.get("g1_d")
