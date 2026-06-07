@@ -41,6 +41,10 @@ _OPENARM_MESH_SUB = r"package://fm_description/openarm_meshes/\1.stl"
 _SO101_MESH_RE = re.compile(r'filename="assets/')
 _SO101_MESH_SUB = r'filename="package://fm_description/so101_description/assets/'
 
+# Same for the vendored G1-D URDF (relative meshes/... paths).
+_G1_MESH_RE = re.compile(r'filename="meshes/')
+_G1_MESH_SUB = r'filename="package://fm_description/g1_d_description/meshes/'
+
 # foxglove_bridge params shared across robots: the default asset_uri_allowlist ([\w-]
 # only) rejects package:// paths through a dotted directory (e.g. the OpenArm's
 # openarm_v2.0), so nothing renders; [-\w.] admits the dot. send_buffer_limit is
@@ -201,6 +205,33 @@ _ROBOTS = {
         servo_config="servo.yaml",
         bringup_srdf={"so101": "so101.srdf"},
         moveit_srdf="so101.srdf",
+    ),
+    "g1_d": RobotSpec(
+        key="g1_d",
+        label="Unitree G1-D",
+        default_variant="g1_d",
+        control_xacro="g1.sim.urdf.xacro",
+        preset_arg=None,  # single fixed configuration; the variant is nominal
+        mesh_rewrite=(_G1_MESH_RE, _G1_MESH_SUB),
+        config_dir="g1_d",
+        controllers={
+            "g1_d": {
+                "active": ["g1_right_arm_controller"],
+                "inactive": [],
+            },
+        },
+        # Only mock needs a standalone controller_manager; mujoco/gazebo/isaac host
+        # their own. real is NOT here — the G1 has no ros2_control hardware interface,
+        # so the real arm is driven by the Servo->arm_sdk bridge (g1_arm_sdk_bridge),
+        # not a controller_manager. sim.launch therefore serves the sim backends only.
+        standalone_cm_backends=frozenset({"mock"}),
+        foxglove_params=_DEFAULT_FOXGLOVE_PARAMS,
+        # G1-D MoveIt config is authored in-repo (Humble, right-arm subset).
+        moveit_pkg="fm_bringup",
+        moveit_cfg=os.path.join("config", "g1_d"),
+        servo_config="servo.yaml",
+        bringup_srdf={"g1_d": "g1_d.srdf"},
+        moveit_srdf="g1_d.srdf",
     ),
 }
 

@@ -75,5 +75,30 @@ def test_so101_moveit_config_in_repo():
     assert spec.semantic("so101")  # resolves the in-repo SRDF without error
 
 
+def test_get_g1_d():
+    spec = registry.get("g1_d")
+    assert spec.key == "g1_d"
+    assert spec.default_variant == "g1_d"
+    assert spec.preset_arg is None
+
+
+def test_g1_d_controller_set():
+    spec = registry.get("g1_d")
+    assert spec.controllers["g1_d"]["active"] == ["g1_right_arm_controller"]
+
+
+def test_g1_d_real_is_not_a_cm_backend():
+    # The G1 real path is the arm_sdk bridge, not a controller_manager.
+    spec = registry.get("g1_d")
+    assert spec.standalone_cm_backends == frozenset({"mock"})
+    assert "real" not in spec.standalone_cm_backends
+
+
+def test_g1_d_moveit_config_in_repo():
+    spec = registry.get("g1_d")
+    assert spec.moveit_pkg == "fm_bringup"
+    assert spec.semantic("g1_d")  # resolves the in-repo SRDF without error
+
+
 def test_registered_robots():
-    assert {"openarm", "so101"} <= set(registry._ROBOTS)
+    assert {"openarm", "so101", "g1_d"} <= set(registry._ROBOTS)
