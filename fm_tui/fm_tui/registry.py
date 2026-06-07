@@ -123,9 +123,23 @@ _ROBOTS = (
 )
 
 
-# Sim + teleop target OpenArm only, and only the presets with a controllers.yaml
-# (see fm_bringup/config/openarm). Backends mirror sim.launch.py's sim_backend.
+# Sim + teleop target the robots + presets that carry a controllers.yaml + Servo
+# config (see fm_bringup/config/<robot> and fm_bringup.registry). Backends mirror
+# sim.launch.py's sim_backend. The G1-D offers only its wheeled variant (the one with
+# a right-arm control config); its real arm path is the arm_sdk bridge, not sim.launch.
 _SIM_ROBOTS = (
+    Robot(
+        key="g1_d",
+        label="Unitree G1 (G1-D)",
+        variants=("g1_d",),
+        default_variant="g1_d",
+    ),
+    Robot(
+        key="so101",
+        label="LeRobot SO101",
+        variants=("so101",),
+        default_variant="so101",
+    ),
     Robot(
         key="openarm",
         label="Enactic OpenArm",

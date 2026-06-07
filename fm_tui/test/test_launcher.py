@@ -52,8 +52,8 @@ def test_backend_path_dispatches_with_sim_backend():
             await pilot.pause()
             menu = pilot.app.query_one("#menu", ListView)
             menu.index = 1  # Simulation (wired, has backends)
-            await pilot.press("enter")  # action -> robot (openarm)
-            await pilot.press("enter")  # robot -> variant (right_arm)
+            await pilot.press("enter")  # action -> robot (g1_d, first in the sim list)
+            await pilot.press("enter")  # robot -> variant (g1_d)
             await pilot.press("enter")  # variant -> backend (mujoco default)
             await pilot.press("enter")  # backend -> dispatch + exit
             await pilot.pause()
@@ -62,8 +62,8 @@ def test_backend_path_dispatches_with_sim_backend():
             "launch",
             "fm_bringup",
             "sim.launch.py",
-            "robot:=openarm",
-            "variant:=right_arm",
+            "robot:=g1_d",
+            "variant:=g1_d",
             "sim_backend:=mujoco",
         ]
 

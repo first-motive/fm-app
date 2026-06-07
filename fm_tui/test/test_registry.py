@@ -29,7 +29,7 @@ def test_simulation_and_teleop_are_wired_with_backends():
         entry = action(key)
         assert entry.wired
         assert entry.has_backends
-        assert {r.key for r in entry.robots} == {"openarm"}
+        assert {r.key for r in entry.robots} == {"openarm", "so101", "g1_d"}
         assert "mujoco" in entry.backends
 
 
