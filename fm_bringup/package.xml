@@ -11,6 +11,8 @@
 
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
+  <!-- registry.py processes the backend-selectable xacro into robot_description. -->
+  <exec_depend>xacro</exec_depend>
   <exec_depend>foxglove_bridge</exec_depend>
   <exec_depend>fm_control</exec_depend>
   <exec_depend>fm_orchestration</exec_depend>

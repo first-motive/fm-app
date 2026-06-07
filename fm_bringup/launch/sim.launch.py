@@ -1,7 +1,8 @@
-"""Unified OpenArm simulation launch — one control stack, swappable sim backend.
+"""Unified simulation launch — one control stack, swappable robot + sim backend.
 
     robot + variant + sim_backend
-        -> robot_description (fm_control backend-selectable xacro)
+        -> RobotSpec (fm_bringup.registry)
+        -> robot_description (the robot's backend-selectable xacro)
         -> robot_state_publisher + foxglove_bridge
         -> backend that hosts the controller_manager:
              mock / real   inline standalone ros2_control_node
@@ -11,14 +12,13 @@
         -> controller spawners (joint_state_broadcaster + arm/gripper controllers)
 
 The controllers and the controller set are identical across backends; only the
-<ros2_control> System plugin in the description swaps. Backend picks the compose
-overlay in scripts/sim.sh (mock/mujoco -> macOS, gazebo/isaac -> Linux/GPU).
+<ros2_control> System plugin in the description swaps. Each robot's specifics live
+in fm_bringup.registry; this file holds no robot-specific data. Backend picks the
+compose overlay in scripts/sim.sh (mock/mujoco -> macOS, gazebo/isaac -> Linux/GPU).
 """
 
 import os
-import re
 
-import xacro
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
@@ -27,89 +27,24 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
-# Visual meshes ship as z-up .stl under fm_description (converted at build); the
-# upstream xacro points visuals at openarm_description .dae. Rewrite so Foxglove
-# (fed by robot_state_publisher) renders. Collisions stay on openarm_description.
-_VISUAL_MESH_RE = re.compile(r"package://openarm_description/([^\"']+?)\.dae")
-_VISUAL_MESH_SUB = r"package://fm_description/openarm_meshes/\1.stl"
-
-# Backends that do not host their own controller_manager need a standalone one.
-_STANDALONE_CM_BACKENDS = {"mock", "real"}
-
-# Active + inactive controllers per variant. Names match the controllers.yaml and
-# the description joint prefixes.
-_CONTROLLERS = {
-    "right_arm": {
-        "active": ["openarm_right_arm_controller"],
-        "inactive": ["openarm_right_forward_position_controller"],
-    },
-    "default_bimanual": {
-        "active": [
-            "openarm_left_arm_controller",
-            "openarm_right_arm_controller",
-            "openarm_left_gripper_controller",
-            "openarm_right_gripper_controller",
-        ],
-        "inactive": [],
-    },
-}
-
-_DEFAULT_VARIANT = "right_arm"
-
-# foxglove_bridge params for the OpenArm, mirroring fm_description's view_robot:
-# its package:// mesh paths run through a dotted directory (openarm_v2.0), which the
-# default asset_uri_allowlist ([\w-] only) rejects, so nothing renders; [-\w.] admits
-# the dot. send_buffer_limit is raised above the 10 MB default for the large
-# default_bimanual body mesh.
-_FOXGLOVE_PARAMS = {
-    "port": 8765,
-    "address": "0.0.0.0",
-    "send_buffer_limit": 134217728,
-    "asset_uri_allowlist": [
-        r"^package://(?:[-\w.]+/)*[-\w.]+"
-        r"\.(?:dae|stl|obj|glb|gltf|mtl|png|jpe?g|tiff?)$"
-    ],
-}
-
-
-def _build_description(variant, sim_backend, controllers_file):
-    """Process the fm_control backend-selectable xacro into a description string."""
-    xacro_path = os.path.join(
-        get_package_share_directory("fm_control"), "urdf", "openarm.sim.urdf.xacro"
-    )
-    mappings = {"robot_preset": variant, "sim_backend": sim_backend}
-    # Gazebo's controller_manager lives in the description plugin, so it needs the
-    # controllers file baked in.
-    if sim_backend == "gazebo":
-        mappings["gazebo_controllers_file"] = controllers_file
-    doc = xacro.process_file(xacro_path, mappings=mappings)
-    return _VISUAL_MESH_RE.sub(_VISUAL_MESH_SUB, doc.toxml())
+from fm_bringup import registry
 
 
 def _launch_setup(context, *args, **kwargs):
     robot = LaunchConfiguration("robot").perform(context)
-    variant = LaunchConfiguration("variant").perform(context) or _DEFAULT_VARIANT
+    spec = registry.get(robot)
+    variant = LaunchConfiguration("variant").perform(context) or spec.default_variant
     sim_backend = LaunchConfiguration("sim_backend").perform(context)
     use_foxglove = LaunchConfiguration("use_foxglove")
 
-    if robot != "openarm":
+    if variant not in spec.controllers:
         raise RuntimeError(
-            f"sim.launch.py supports robot:=openarm only (got '{robot}'). "
-            "G1/SO101 are description-only for now."
-        )
-    if variant not in _CONTROLLERS:
-        raise RuntimeError(
-            f"No controllers.yaml for variant '{variant}'. "
-            f"Available: {', '.join(sorted(_CONTROLLERS))}."
+            f"No controllers.yaml for {robot} variant '{variant}'. "
+            f"Available: {', '.join(sorted(spec.controllers))}."
         )
 
-    controllers_file = os.path.join(
-        get_package_share_directory("fm_bringup"),
-        "config",
-        "openarm",
-        f"{variant}.controllers.yaml",
-    )
-    robot_description = _build_description(variant, sim_backend, controllers_file)
+    controllers_file = spec.controllers_file(variant)
+    robot_description = spec.build_description(variant, sim_backend, controllers_file)
 
     nodes = [
         Node(
@@ -121,7 +56,7 @@ def _launch_setup(context, *args, **kwargs):
         Node(
             package="foxglove_bridge",
             executable="foxglove_bridge",
-            parameters=[_FOXGLOVE_PARAMS],
+            parameters=[spec.foxglove_params],
             output="screen",
             condition=IfCondition(use_foxglove),
         ),
@@ -131,7 +66,7 @@ def _launch_setup(context, *args, **kwargs):
     backends_dir = os.path.join(
         get_package_share_directory("fm_bringup"), "launch", "sim_backends"
     )
-    if sim_backend in _STANDALONE_CM_BACKENDS:
+    if sim_backend in spec.standalone_cm_backends:
         nodes.append(
             Node(
                 package="controller_manager",
@@ -162,7 +97,7 @@ def _launch_setup(context, *args, **kwargs):
         raise RuntimeError(f"Unknown sim_backend '{sim_backend}'.")
 
     # Controller spawners against whichever controller_manager came up above.
-    spec = _CONTROLLERS[variant]
+    cset = spec.controllers[variant]
     nodes.append(
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
@@ -174,8 +109,8 @@ def _launch_setup(context, *args, **kwargs):
             ),
             launch_arguments={
                 "controllers_file": controllers_file,
-                "controllers": ",".join(spec["active"]),
-                "inactive_controllers": ",".join(spec["inactive"]),
+                "controllers": ",".join(cset["active"]),
+                "inactive_controllers": ",".join(cset["inactive"]),
                 "use_standalone_cm": "false",
             }.items(),
         )
@@ -190,13 +125,12 @@ def generate_launch_description():
             DeclareLaunchArgument(
                 "robot",
                 default_value="openarm",
-                description="Robot to simulate (openarm only for now).",
+                description="Robot to simulate (see fm_bringup.registry).",
             ),
             DeclareLaunchArgument(
                 "variant",
                 default_value="",
-                description="OpenArm preset; empty uses right_arm. "
-                "One of: right_arm, default_bimanual.",
+                description="Robot preset; empty uses the registry default.",
             ),
             DeclareLaunchArgument(
                 "sim_backend",
