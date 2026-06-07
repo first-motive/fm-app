@@ -1,0 +1,46 @@
+# SO101 controllers: joint_state_broadcaster + a 5-joint arm JTC + a gripper JTC.
+#
+# Identical structure across every sim backend — only the <ros2_control> System
+# plugin in the description swaps. For mujoco/gazebo/isaac the sim process hosts the
+# controller_manager and reads these params; for mock/real a standalone
+# ros2_control_node does. Joint names match the vendored SO101 URDF (bare names).
+controller_manager:
+  ros__parameters:
+    update_rate: 100  # Hz — matches the OpenArm; comfortable for CPU MuJoCo on a Mac
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    # Primary MoveIt Servo target: streams trajectory_msgs/JointTrajectory.
+    so101_arm_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+    # The gripper is not driven by Servo; a JTC holds + accepts trajectory goals.
+    so101_gripper_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+so101_arm_controller:
+  ros__parameters:
+    joints:
+      - shoulder_pan
+      - shoulder_lift
+      - elbow_flex
+      - wrist_flex
+      - wrist_roll
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+      - velocity
+    allow_nonzero_velocity_at_trajectory_end: true
+
+so101_gripper_controller:
+  ros__parameters:
+    joints:
+      - gripper
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+      - velocity
+    allow_nonzero_velocity_at_trajectory_end: true

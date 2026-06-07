@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+SRDF for the LeRobot SO101 (5-DOF arm + gripper).
+
+MoveIt Servo needs an SRDF whose joints/links match the loaded model exactly, or the
+planning scene monitor waits forever ("complete state not known"). This is authored
+against the vendored TheRobotStudio SO101 URDF (bare joint names: shoulder_pan ...
+gripper), NOT the upstream so_arm100_moveit_config SRDF, which uses _joint-suffixed
+names + a jaw_link that this model does not have. Robot name so101 matches the
+fm_control description so MoveIt accepts the pair.
+
+The manipulator chain base_link -> gripper_link covers the 5 arm joints
+(shoulder_pan, shoulder_lift, elbow_flex, wrist_flex, wrist_roll). The gripper joint
+is separate. A 5-DOF arm cannot span SE(3); Servo jogs it per-joint primarily and
+least-squares Cartesian twists through the inverse Jacobian (see servo.yaml).
+-->
+<robot name="so101">
+    <group name="manipulator">
+        <chain base_link="base_link" tip_link="gripper_link"/>
+    </group>
+    <group name="gripper">
+        <joint name="gripper"/>
+    </group>
+
+    <group_state name="home" group="manipulator">
+        <joint name="shoulder_pan" value="0"/>
+        <joint name="shoulder_lift" value="0"/>
+        <joint name="elbow_flex" value="0"/>
+        <joint name="wrist_flex" value="0"/>
+        <joint name="wrist_roll" value="0"/>
+    </group_state>
+    <group_state name="open" group="gripper">
+        <joint name="gripper" value="1.5"/>
+    </group_state>
+    <group_state name="closed" group="gripper">
+        <joint name="gripper" value="-0.17"/>
+    </group_state>
+
+    <end_effector name="gripper" parent_link="gripper_link" group="gripper" parent_group="manipulator"/>
+
+    <disable_collisions link1="base_link" link2="shoulder_link" reason="Adjacent"/>
+    <disable_collisions link1="shoulder_link" link2="upper_arm_link" reason="Adjacent"/>
+    <disable_collisions link1="upper_arm_link" link2="lower_arm_link" reason="Adjacent"/>
+    <disable_collisions link1="lower_arm_link" link2="wrist_link" reason="Adjacent"/>
+    <disable_collisions link1="wrist_link" link2="gripper_link" reason="Adjacent"/>
+    <disable_collisions link1="gripper_link" link2="moving_jaw_so101_v1_link" reason="Adjacent"/>
+</robot>

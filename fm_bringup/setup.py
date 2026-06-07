@@ -20,6 +20,10 @@ setup(
             "share/" + package_name + "/config/openarm",
             glob("config/openarm/*.yaml") + glob("config/openarm/*.srdf"),
         ),
+        (
+            "share/" + package_name + "/config/so101",
+            glob("config/so101/*.yaml") + glob("config/so101/*.srdf"),
+        ),
     ],
     install_requires=["setuptools"],
     zip_safe=True,

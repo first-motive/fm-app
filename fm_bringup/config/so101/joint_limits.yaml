@@ -1,0 +1,39 @@
+# Joint limits for the SO101, consumed by MoveIt Servo (robot_description_planning).
+#
+# Values mirror so_arm100_moveit_config, re-keyed to the bare joint names of the
+# vendored TheRobotStudio URDF. Servo uses these for joint_limit_margin slowdown near
+# the bounds; position bounds come from the URDF.
+default_velocity_scaling_factor: 0.5
+default_acceleration_scaling_factor: 0.5
+
+joint_limits:
+  shoulder_pan:
+    has_velocity_limits: true
+    max_velocity: 3.14
+    has_acceleration_limits: true
+    max_acceleration: 1.0
+  shoulder_lift:
+    has_velocity_limits: true
+    max_velocity: 3.14
+    has_acceleration_limits: true
+    max_acceleration: 1.0
+  elbow_flex:
+    has_velocity_limits: true
+    max_velocity: 3.14
+    has_acceleration_limits: true
+    max_acceleration: 1.0
+  wrist_flex:
+    has_velocity_limits: true
+    max_velocity: 3.14
+    has_acceleration_limits: true
+    max_acceleration: 1.0
+  wrist_roll:
+    has_velocity_limits: true
+    max_velocity: 3.14
+    has_acceleration_limits: true
+    max_acceleration: 1.0
+  gripper:
+    has_velocity_limits: true
+    max_velocity: 3.14
+    has_acceleration_limits: true
+    max_acceleration: 1.0

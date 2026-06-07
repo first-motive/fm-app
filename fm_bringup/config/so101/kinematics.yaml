@@ -1,0 +1,11 @@
+# Kinematics for the SO101 MoveIt groups.
+#
+# KDL plugin, mirroring so_arm100_moveit_config. MoveIt Servo jogs through the robot
+# model's Jacobian (pseudo-inverse), so it does not rely on this IK solver for
+# teleop; the entry is here so the planning scene + any future MoveGroup use resolve.
+# The manipulator is 5-DOF, so a full 6-DOF pose IK request would be rank-deficient —
+# expected, and not exercised by Servo jogging.
+manipulator:
+  kinematics_solver: kdl_kinematics_plugin/KDLKinematicsPlugin
+  kinematics_solver_search_resolution: 0.005
+  kinematics_solver_timeout: 0.005

@@ -1,0 +1,58 @@
+# MoveIt Servo for the SO101 manipulator group — JointJog primary, Cartesian by
+# inverse Jacobian.
+#
+# Servo subscribes /joint_states from the sim (any backend), turns incoming
+# TwistStamped / JointJog commands into a streamed JointTrajectory, and publishes it
+# to the arm's JTC. Teleop inputs (Foxglove panel, joy, spacenav) publish onto the
+# delta command topics below.
+#
+# The SO101 is a 5-DOF arm: it cannot achieve an arbitrary 6-DOF Cartesian twist.
+# Per-joint jogging (delta_joint_cmds) works unconditionally and is the primary
+# surface. Cartesian jogging (delta_twist_cmds) runs through Servo's pseudo-inverse
+# Jacobian, which least-squares the under-actuated twist — translation tracks, and
+# orientation drifts on the axis the arm cannot reach. That drift is expected.
+moveit_servo:
+  use_gazebo: false
+  command_in_type: unitless  # [-1, 1] for joystick-style inputs
+
+  scale:
+    linear: 0.3       # m/s at unit command (smaller arm than the OpenArm)
+    rotational: 0.6   # rad/s at unit command
+    joint: 0.5        # rad/s at unit command
+
+  low_latency_mode: false
+  publish_period: 0.034  # ~30 Hz command stream
+
+  # Stream a JointTrajectory to the arm's joint_trajectory_controller.
+  command_out_type: trajectory_msgs/JointTrajectory
+  publish_joint_positions: true
+  publish_joint_velocities: false
+  publish_joint_accelerations: false
+
+  move_group_name: manipulator
+  planning_frame: base_link
+  ee_frame_name: gripper_link
+  robot_link_command_frame: base_link
+
+  incoming_command_timeout: 0.1
+  joint_topic: /joint_states
+  status_topic: ~/status
+  cartesian_command_in_topic: ~/delta_twist_cmds
+  joint_command_in_topic: ~/delta_joint_cmds
+  command_out_topic: /so101_arm_controller/joint_trajectory
+
+  # Collision + singularity safety — Servo slows near both. A 5-DOF arm sits near a
+  # rank-deficient Jacobian for many twists, so the singularity thresholds matter:
+  # Servo scales the command down rather than lurching.
+  check_collisions: true
+  collision_check_rate: 10.0
+  self_collision_proximity_threshold: 0.01
+  scene_collision_proximity_threshold: 0.02
+  collision_distance_safety_factor: 1000.0
+  min_allowable_collision_distance: 0.01
+
+  lower_singularity_threshold: 17.0
+  hard_stop_singularity_threshold: 30.0
+  leaving_singularity_threshold_multiplier: 2.0
+
+  joint_limit_margin: 0.1
