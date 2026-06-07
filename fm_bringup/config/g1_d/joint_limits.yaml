@@ -1,0 +1,43 @@
+# Joint limits for the G1-D right arm, consumed by MoveIt Servo
+# (robot_description_planning). Position bounds come from the URDF; these velocity +
+# acceleration caps are teleop-safe values (well below the URDF's 22-37 rad/s spec
+# limits) that Servo uses for joint_limit_margin slowdown near the bounds.
+default_velocity_scaling_factor: 0.5
+default_acceleration_scaling_factor: 0.5
+
+joint_limits:
+  right_shoulder_pitch_joint:
+    has_velocity_limits: true
+    max_velocity: 3.14
+    has_acceleration_limits: true
+    max_acceleration: 1.0
+  right_shoulder_roll_joint:
+    has_velocity_limits: true
+    max_velocity: 3.14
+    has_acceleration_limits: true
+    max_acceleration: 1.0
+  right_shoulder_yaw_joint:
+    has_velocity_limits: true
+    max_velocity: 3.14
+    has_acceleration_limits: true
+    max_acceleration: 1.0
+  right_elbow_joint:
+    has_velocity_limits: true
+    max_velocity: 3.14
+    has_acceleration_limits: true
+    max_acceleration: 1.0
+  right_wrist_roll_joint:
+    has_velocity_limits: true
+    max_velocity: 3.14
+    has_acceleration_limits: true
+    max_acceleration: 1.0
+  right_wrist_pitch_joint:
+    has_velocity_limits: true
+    max_velocity: 3.14
+    has_acceleration_limits: true
+    max_acceleration: 1.0
+  right_wrist_yaw_joint:
+    has_velocity_limits: true
+    max_velocity: 3.14
+    has_acceleration_limits: true
+    max_acceleration: 1.0

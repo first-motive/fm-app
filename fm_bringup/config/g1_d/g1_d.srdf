@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+SRDF for the Unitree G1-D right arm (7-DOF).
+
+MoveIt Servo needs an SRDF whose joints/links match the loaded model exactly, or the
+planning scene monitor waits forever ("complete state not known"). This trims the
+full G1-D (wheeled base + waist + legs + both arms + hands, 34 movable joints) to the
+right arm only: 7 joints, base at torso_link, tip at right_wrist_yaw_link. The waist,
+legs, left arm, and base are left out — they hold at zero in sim. Robot name G1_D
+matches the fm_control description so MoveIt accepts the pair.
+
+The arm is 7-DOF, so it spans SE(3): Servo drives full 6-DOF Cartesian twists (no
+reduced-DOF caveat, unlike the SO101).
+-->
+<robot name="G1_D">
+    <group name="right_arm">
+        <chain base_link="torso_link" tip_link="right_wrist_yaw_link"/>
+    </group>
+
+    <group_state name="home" group="right_arm">
+        <joint name="right_shoulder_pitch_joint" value="0"/>
+        <joint name="right_shoulder_roll_joint" value="0"/>
+        <joint name="right_shoulder_yaw_joint" value="0"/>
+        <joint name="right_elbow_joint" value="0"/>
+        <joint name="right_wrist_roll_joint" value="0"/>
+        <joint name="right_wrist_pitch_joint" value="0"/>
+        <joint name="right_wrist_yaw_joint" value="0"/>
+    </group_state>
+
+    <disable_collisions link1="torso_link" link2="right_shoulder_pitch_link" reason="Adjacent"/>
+    <disable_collisions link1="right_shoulder_pitch_link" link2="right_shoulder_roll_link" reason="Adjacent"/>
+    <disable_collisions link1="right_shoulder_roll_link" link2="right_shoulder_yaw_link" reason="Adjacent"/>
+    <disable_collisions link1="right_shoulder_yaw_link" link2="right_elbow_link" reason="Adjacent"/>
+    <disable_collisions link1="right_elbow_link" link2="right_wrist_roll_link" reason="Adjacent"/>
+    <disable_collisions link1="right_wrist_roll_link" link2="right_wrist_pitch_link" reason="Adjacent"/>
+    <disable_collisions link1="right_wrist_pitch_link" link2="right_wrist_yaw_link" reason="Adjacent"/>
+</robot>

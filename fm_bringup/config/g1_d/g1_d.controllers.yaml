@@ -1,0 +1,33 @@
+# G1-D controllers: joint_state_broadcaster + a 7-joint right-arm JTC.
+#
+# Sim backends only (mock/mujoco/gazebo/isaac) — the real backend is the
+# Servo->arm_sdk bridge, which replaces ros2_control. For mujoco/gazebo/isaac the sim
+# process hosts the controller_manager and reads these params; for mock a standalone
+# ros2_control_node does. Joint names match the vendored g1_d URDF right arm.
+controller_manager:
+  ros__parameters:
+    update_rate: 100  # Hz
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    # Primary MoveIt Servo target: streams trajectory_msgs/JointTrajectory.
+    g1_right_arm_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+g1_right_arm_controller:
+  ros__parameters:
+    joints:
+      - right_shoulder_pitch_joint
+      - right_shoulder_roll_joint
+      - right_shoulder_yaw_joint
+      - right_elbow_joint
+      - right_wrist_roll_joint
+      - right_wrist_pitch_joint
+      - right_wrist_yaw_joint
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+      - velocity
+    allow_nonzero_velocity_at_trajectory_end: true

@@ -24,6 +24,10 @@ setup(
             "share/" + package_name + "/config/so101",
             glob("config/so101/*.yaml") + glob("config/so101/*.srdf"),
         ),
+        (
+            "share/" + package_name + "/config/g1_d",
+            glob("config/g1_d/*.yaml") + glob("config/g1_d/*.srdf"),
+        ),
     ],
     install_requires=["setuptools"],
     zip_safe=True,
