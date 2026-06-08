@@ -108,7 +108,7 @@ def test_single_arm_robots_have_no_cmd_remaps():
 
 def test_g1_d_teleop_nodes_include_hand_teleop():
     spec = registry.get("g1_d")
-    assert spec.teleop_nodes == (("fm_bringup", "g1_hand_teleop"),)
+    assert spec.teleop_nodes == (("fm_teleop_device", "g1_hand_teleop"),)
 
 
 def test_single_arm_robots_have_no_teleop_nodes():

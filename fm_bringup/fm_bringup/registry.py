@@ -263,7 +263,7 @@ _ROBOTS = {
         # /cmd_vel so the panel + g1_base_teleop share one base topic across sim and real.
         cmd_remaps=(("/g1_base_controller/cmd_vel_unstamped", "/cmd_vel"),),
         # Panel hand presets/sliders -> hand controllers via the hand teleop adapter.
-        teleop_nodes=(("fm_bringup", "g1_hand_teleop"),),
+        teleop_nodes=(("fm_teleop_device", "g1_hand_teleop"),),
         # Only mock needs a standalone controller_manager; mujoco/gazebo/isaac host
         # their own. real is NOT here — the G1 has no ros2_control hardware interface,
         # so the real arm is driven by the Servo->arm_sdk bridge (g1_arm_sdk_bridge),

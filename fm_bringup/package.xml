@@ -37,11 +37,9 @@
   <exec_depend>moveit_servo</exec_depend>
   <exec_depend>openarm_bimanual_moveit_config</exec_depend>
 
-  <!-- Teleop input adapters: gamepad + SpaceMouse -> Servo; panel -> Dex3 hands. -->
-  <exec_depend>geometry_msgs</exec_depend>
-  <exec_depend>sensor_msgs</exec_depend>
-  <exec_depend>std_msgs</exec_depend>
-  <exec_depend>trajectory_msgs</exec_depend>
+  <!-- Teleop sources live in fm_teleop_device; teleop.launch.py spawns them and the
+       gamepad/SpaceMouse driver nodes (joy_node, spacenav_node). -->
+  <exec_depend>fm_teleop_device</exec_depend>
   <exec_depend>joy</exec_depend>
   <exec_depend>spacenav</exec_depend>
 
