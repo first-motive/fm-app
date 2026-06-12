@@ -58,8 +58,12 @@ moveit_servo:
   collision_distance_safety_factor: 1000.0
   min_allowable_collision_distance: 0.01
 
-  lower_singularity_threshold: 17.0
-  hard_stop_singularity_threshold: 30.0
+  # Raised from the MoveIt Servo defaults (17 / 30) to widen the usable band before the
+  # singularity guard halts. A 5-DOF arm sits near a rank-deficient Jacobian for many
+  # twists, so the default thresholds emergency-stop almost immediately; this lets it jog.
+  # The trade-off is faster, less-damped motion near a true singularity — fine in sim.
+  lower_singularity_threshold: 30.0
+  hard_stop_singularity_threshold: 60.0
   leaving_singularity_threshold_multiplier: 2.0
 
   joint_limit_margin: 0.1
