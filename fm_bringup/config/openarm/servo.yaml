@@ -40,8 +40,15 @@ moveit_servo:
   joint_command_in_topic: ~/delta_joint_cmds
   command_out_topic: /openarm_right_arm_controller/joint_trajectory
 
-  # Collision + singularity safety — Servo slows near both.
-  check_collisions: true
+  # Collision checking is OFF, matching the G1-D. Servo monitors the whole model and,
+  # without a full SRDF self-collision matrix, reads adjacent (connected) arm links as a
+  # perpetual near-collision: with collision_distance_safety_factor 1000 and ~0.02 m
+  # proximity thresholds, the velocity scale collapses to zero and Cartesian jogging
+  # freezes after the first command ("Close to a collision, decelerating"). A proper SRDF
+  # collision matrix is the real fix (follow-up); until then, disable the checked path.
+  # The thresholds below are retained for when checking is re-enabled. Singularity
+  # slowdown still applies.
+  check_collisions: false
   collision_check_rate: 10.0
   self_collision_proximity_threshold: 0.01
   scene_collision_proximity_threshold: 0.02

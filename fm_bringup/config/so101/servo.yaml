@@ -41,10 +41,17 @@ moveit_servo:
   joint_command_in_topic: ~/delta_joint_cmds
   command_out_topic: /so101_arm_controller/joint_trajectory
 
-  # Collision + singularity safety — Servo slows near both. A 5-DOF arm sits near a
-  # rank-deficient Jacobian for many twists, so the singularity thresholds matter:
-  # Servo scales the command down rather than lurching.
-  check_collisions: true
+  # Collision checking is OFF, matching the G1-D and openarm. Without a full SRDF
+  # self-collision matrix, Servo reads adjacent (connected) links as a perpetual
+  # near-collision (collision_distance_safety_factor 1000 + ~0.02 m thresholds), which
+  # collapses the velocity scale to zero and freezes Cartesian jogging. A proper SRDF
+  # collision matrix is the real fix (follow-up). The thresholds below are retained for
+  # when checking is re-enabled.
+  #
+  # Singularity still applies and matters more here: a 5-DOF arm sits near a rank-
+  # deficient Jacobian for many twists, so Servo scales the command down rather than
+  # lurching. Expect joint jog to be the primary mode; Cartesian is translation-biased.
+  check_collisions: false
   collision_check_rate: 10.0
   self_collision_proximity_threshold: 0.01
   scene_collision_proximity_threshold: 0.02
