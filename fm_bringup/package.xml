@@ -19,7 +19,6 @@
   <exec_depend>joint_state_publisher</exec_depend>
   <exec_depend>foxglove_bridge</exec_depend>
   <exec_depend>fm_control</exec_depend>
-  <exec_depend>fm_orchestration</exec_depend>
 
   <!-- ros2_control runtime: controller_manager + the controllers the bringup spawns. -->
   <exec_depend>controller_manager</exec_depend>

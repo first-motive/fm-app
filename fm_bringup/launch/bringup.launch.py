@@ -1,7 +1,7 @@
 """Sample First Motive bringup.
 
 Launches the foxglove_bridge (ws://0.0.0.0:8765 -> macOS Foxglove Studio) plus the
-control and orchestration node stubs. Replace stubs as real nodes land.
+control node stub. Replace stubs as real nodes land.
 """
 
 from launch import LaunchDescription
@@ -22,12 +22,6 @@ def generate_launch_description():
                 package="fm_control",
                 executable="control_node",
                 name="control_node",
-                output="screen",
-            ),
-            Node(
-                package="fm_orchestration",
-                executable="orchestrator",
-                name="orchestrator",
                 output="screen",
             ),
         ]

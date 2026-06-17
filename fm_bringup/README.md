@@ -20,7 +20,7 @@ Registered: `openarm`, `so101`, `g1_d`.
 
 ```
 launch/
-  bringup.launch.py             foxglove_bridge + control/orchestration stubs
+  bringup.launch.py             foxglove_bridge + control stub
   sim.launch.py                 unified sim: robot + variant + sim_backend
   servo.launch.py               MoveIt Servo for the robot's arm group
   teleop.launch.py              Servo + selected input (foxglove | joy | spacenav)
