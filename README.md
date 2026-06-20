@@ -1,25 +1,44 @@
-# fm_app
+# fm-app
 
-Application layer for the fm_ros2 workspace. Groups the launch orchestration and
-the operator TUI — the user-facing entry points that start and drive the stack.
-Split-ready: this whole group extracts cleanly into its own repo later.
+[![License: Proprietary](https://img.shields.io/badge/License-Proprietary-blue.svg)](LICENSE)
 
-## Sub-Packages
+Application layer for First Motive's ROS2 stack. Groups the bringup launch
+orchestration and the operator TUI — the user-facing entry points that start and
+drive the whole stack.
+
+This is the integration repo: `fm_bringup` composes the robot, sim, and teleop
+layers, so its `.repos` pulls the
+[`fm-robot`](https://github.com/first-motive/fm-robot),
+[`fm-sim`](https://github.com/first-motive/fm-sim), and
+[`fm-teleop`](https://github.com/first-motive/fm-teleop) sibling repos.
+
+Part of First Motive's ROS2 (Humble) stack. Assembled with all seven package
+repos by [`fm-ros2`](https://github.com/first-motive/fm-ros2).
+
+## Packages
 
 | Package | Build | Role |
 |---------|-------|------|
-| [`fm_bringup`](fm_bringup/README.md) | ament_python | Top-level launch files and config that compose the full stack (real and sim) |
-| [`fm_tui`](fm_tui/README.md) | ament_python | Operator terminal UI: the launcher console_script that drives bringup |
+| `fm_bringup` | ament_python | Top-level launch files and config composing the full stack (real and sim) |
+| `fm_tui` | ament_python | Operator terminal UI: the launcher that drives bringup |
+| `fm_app` | ament_cmake | Metapackage tying the two together for a single install |
 
-## How the Pieces Connect
+## Standalone Build
 
-`fm_tui` is the entry point the operator runs; it launches `fm_bringup`, which
-composes the controllers, sensors, and (in sim) the chosen engine into a running
-stack. `fm_bringup` is the orchestration seam — it pulls the robot, sim, and control
-layers together through their launch files. See
-[docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md) for the full launch graph.
+Clone into a colcon workspace's `src/`, pull the siblings + externals, then build:
 
-## Build Type
+```bash
+mkdir -p ws/src && cd ws/src
+git clone https://github.com/first-motive/fm-app.git
+vcs import < fm-app/fm-app.repos     # siblings (robot, sim, teleop) + externals
+cd .. && colcon build --symlink-install
+colcon test && colcon test-result --verbose
+```
 
-`ament_cmake` metapackage (exec-depends on the two sub-packages). The package
-itself builds nothing; it ties the group together for a single install.
+Sibling repos track `main` — fast inner loop while every repo churns together
+early; revisit exact-commit pinning at the first release.
+
+## Governance
+
+Owner-free-on-main — see [CONTRIBUTING.md](CONTRIBUTING.md) and
+[`.github/CODEOWNERS`](.github/CODEOWNERS).

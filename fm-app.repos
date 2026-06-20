@@ -1,0 +1,44 @@
+# vcs import < fm-app.repos   (run from the workspace root)
+#
+# Siblings fm-robot + fm-sim + fm-teleop (track main) + their externals.
+repositories:
+  src/fm-robot:
+    type: git
+    url: https://github.com/first-motive/fm-robot.git
+    version: main
+  src/fm-sim:
+    type: git
+    url: https://github.com/first-motive/fm-sim.git
+    version: main
+  src/fm-teleop:
+    type: git
+    url: https://github.com/first-motive/fm-teleop.git
+    version: main
+  external/openarm_description:
+    type: git
+    url: https://github.com/enactic/openarm_description.git
+    version: 846a82d8baf64efdbb7f55c7f64b9b004939061b
+  external/openarm_ros2:
+    type: git
+    url: https://github.com/enactic/openarm_ros2.git
+    version: 01b9f3815222b490a593f01379d8e2106c8da6a0
+  external/unitree_ros:
+    type: git
+    url: https://github.com/unitreerobotics/unitree_ros.git
+    version: ae2b2a7e9ba1b5814b5cb78b3c5800829c5591dd
+  external/unitree_ros2:
+    type: git
+    url: https://github.com/unitreerobotics/unitree_ros2.git
+    version: 5204e6e098ee53f4bd929bd77eb1d387cd0fa842
+  external/so_arm:
+    type: git
+    url: https://github.com/TheRobotStudio/SO-ARM100.git
+    version: fda892cba81032c46c40976a48c9ceadbf40a9ca
+  external/openarm_mujoco:
+    type: git
+    url: https://github.com/enactic/openarm_mujoco.git
+    version: 5c6e1b4c71cbe27c6a4b58c7f198f080449e1b9c
+  external/unitree_mujoco:
+    type: git
+    url: https://github.com/unitreerobotics/unitree_mujoco.git
+    version: ae6a8403e272733e9996ef59990880330496177f
