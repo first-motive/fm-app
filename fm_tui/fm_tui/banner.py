@@ -1,14 +1,20 @@
 """FM-branded terminal banners — the colour-coded step rules run.sh paints with.
 
-run.sh narrates each launch step (install OrbStack, bring the container up, build
-the workspace, open the TUI). Each step renders as a three-row block — a rule, the
-title, an optional description, another rule — in the First Motive palette so the
-steps read at a glance instead of scrolling by as plain ``>>`` lines::
+run.sh narrates each launch step (detect OS, bring the container up, build the
+workspace, open the TUI). Each step renders as a numbered header block — a rule,
+the ``N. title``, another rule — in the First Motive palette. run.sh prints the
+per-step status as plain ``- `` bullets beneath the block, so a run reads as::
 
     ────────────────────────────────────────
-    ▸ Building Workspace
-      colcon build --symlink-install · incremental
+    1. Detect OS
     ────────────────────────────────────────
+    - macOS detected
+
+    ────────────────────────────────────────
+    2. macOS Container
+    ────────────────────────────────────────
+    - OrbStack already installed
+    - Container up
 
 The rules are drawn by rich's ``Console.rule`` command, which fits the line to the
 terminal width for us. The palette lives here once so run.sh and the TUI share one
@@ -18,8 +24,8 @@ rich is a fm_tui dependency (Textual already pulls it in). The first run.sh step
 fire on the host before the container exists, so run.sh runs this through
 ``uv run --with rich`` to get rich on the host too.
 
-    python3 -m fm_tui.banner "Container Up" "compose up -d"
-    python3 -m fm_tui.banner "Foxglove Studio" "ws://localhost:8765" info
+    python3 -m fm_tui.banner 1 "Detect OS"
+    python3 -m fm_tui.banner 4 "Launcher" info
 """
 
 from __future__ import annotations
@@ -45,37 +51,25 @@ ROLES = {
 }
 
 
-def emit(
-    title: str,
-    description: str = "",
-    role: str = "step",
-    *,
-    console: Console | None = None,
-) -> None:
-    """Draw a banner block (rule / bold title / dim description / rule) to ``console``.
+def emit(number, title: str, role: str = "step", *, console: Console | None = None) -> None:
+    """Draw a numbered step header block (rule / ``N. title`` / rule) to ``console``.
 
-    ``description`` is optional — omit it for a two-row title-only block. Defaults
-    to a stdout console, which auto-detects width, TTY, and ``NO_COLOR``.
+    Defaults to a stdout console, which auto-detects width, TTY, and ``NO_COLOR``.
     """
     console = console or Console()
     colour = ROLES.get(role, LILAC)
     console.rule(style=colour)
-    console.print(Text(f"▸ {title}", style=Style(color=colour, bold=True)))
-    if description:
-        console.print(Text(f"  {description}", style=Style(color=colour, dim=True)))
+    console.print(Text(f"{number}. {title}", style=Style(color=colour, bold=True)))
     console.rule(style=colour)
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI: ``banner.py <title> [description] [role]`` — print one banner block."""
+    """CLI: ``banner.py <number> <title> [role]`` — print one step header block."""
     args = sys.argv[1:] if argv is None else argv
-    if not args:
-        print("usage: banner.py <title> [description] [step|info|done]", file=sys.stderr)
+    if len(args) < 2:
+        print("usage: banner.py <number> <title> [step|info|done]", file=sys.stderr)
         return 2
-    title = args[0]
-    description = args[1] if len(args) > 1 else ""
-    role = args[2] if len(args) > 2 else "step"
-    emit(title, description, role)
+    emit(args[0], args[1], args[2] if len(args) > 2 else "step")
     return 0
 
 
