@@ -5,13 +5,14 @@ walks the declarative :mod:`fm_tui.registry` — action -> robot -> variant, plu
 backend step for sim/teleop actions — then dispatches the matching ``ros2 launch``
 for wired actions::
 
-    Header
-    ┌ menu ───────────────────────────┐
-    │ > Robot Description              │   ← action level
-    │   Teleop            (not yet wired)
-    │   Autonomous        (not yet wired)
-    └──────────────────────────────────┘
-    Footer   ↑↓ move · enter select · esc back · q quit
+    ◢ FIRST MOTIVE · ROBOT DESCRIPTION › G1_D
+    ┏ MENU ────────────────────────────┓
+    ┃ ▸ Robot Description               ┃   ← caret marks the highlighted row
+    ┃   Teleop                          ┃
+    ┃   Autonomous                      ┃   ← grey: stub, no launch graph yet
+    ┃   Simulation                      ┃
+    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+    Footer   [Q] QUIT   [ESC] BACK
 
 Dispatch handoff: selecting a variant exits the Textual app with the ``ros2
 launch`` argv as its return value. :func:`main` then runs that command, so the
@@ -30,6 +31,7 @@ import subprocess
 from textual.app import App, ComposeResult
 from textual.widgets import Footer, Label, ListItem, ListView
 
+from fm_tui.palette import LILAC, PLUM
 from fm_tui.registry import Action, Robot, actions
 from fm_tui.theme import BorderedPanel, Header, apply_theme
 
@@ -39,13 +41,25 @@ _ACTION, _ROBOT, _VARIANT, _BACKEND = "action", "robot", "variant", "backend"
 
 
 class _MenuItem(ListItem):
-    """A list row carrying the registry object (or variant string) it selects."""
+    """A list row carrying the registry object (or variant string) it selects.
+
+    The row reserves a two-column gutter for the selection caret so highlighting
+    a row does not shift its text; :meth:`set_selected` fills the gutter.
+    """
 
     def __init__(self, text: str, value: object, *, stub: bool = False) -> None:
-        super().__init__(Label(text))
+        self._text = text
+        self._display = f"  {text}"
+        self._label = Label(self._display)
+        super().__init__(self._label)
         self.value = value
         if stub:
             self.add_class("stub")
+
+    def set_selected(self, selected: bool) -> None:
+        """Show the ``▸`` caret on the highlighted row, blank gutter otherwise."""
+        self._display = f"{'▸' if selected else ' '} {self._text}"
+        self._label.update(self._display)
 
 
 @apply_theme
@@ -54,13 +68,41 @@ class FmLauncherApp(App):
 
     TITLE = "fm_tui launcher"
     BINDINGS = [
-        ("q", "quit", "Quit"),
-        ("escape", "back", "Back"),
+        ("q", "quit", "QUIT"),
+        ("escape", "back", "BACK"),
     ]
-    CSS = """
-    .stub {
+    CSS = f"""
+    Screen {{
+        padding: 1 2;
+    }}
+    /* Wrap the menu to its rows instead of stretching (ListView defaults to
+       height: 1fr); cap at the viewport so a long list scrolls inside the box
+       rather than pushing it past the terminal bottom. */
+    #menu {{
+        height: auto;
+        max-height: 100%;
+    }}
+    .stub {{
         color: $text-disabled;
-    }
+    }}
+    /* Recolour the selected-row highlight (Textual paints it with the blue
+       accent). Textual renamed the class from `--highlight` (<=0.8x) to
+       `-highlight` (>=0.86), so cover both spellings, focused and blurred. The
+       Label rule recolours the row text, which the Label sets on itself. */
+    ListView > ListItem.--highlight,
+    ListView:focus > ListItem.--highlight,
+    ListView > ListItem.-highlight,
+    ListView:focus > ListItem.-highlight {{
+        background: {PLUM} !important;
+        color: {LILAC} !important;
+        text-style: bold;
+    }}
+    ListView > ListItem.--highlight Label,
+    ListView:focus > ListItem.--highlight Label,
+    ListView > ListItem.-highlight Label,
+    ListView:focus > ListItem.-highlight Label {{
+        color: {LILAC} !important;
+    }}
     """
 
     def __init__(self, **kwargs) -> None:
@@ -71,7 +113,7 @@ class FmLauncherApp(App):
         self._variant: str | None = None
 
     def compose(self) -> ComposeResult:
-        yield Header("fm_tui launcher — pick an action")
+        yield Header()
         with BorderedPanel(title="menu"):
             yield ListView(id="menu")
         yield Footer()
@@ -104,14 +146,9 @@ class FmLauncherApp(App):
 
     def _items_for_level(self) -> list[_MenuItem]:
         if self._level == _ACTION:
-            return [
-                _MenuItem(
-                    a.label if a.wired else f"{a.label}  (not yet wired)",
-                    a,
-                    stub=not a.wired,
-                )
-                for a in actions()
-            ]
+            # Stub actions read as disabled from the grey styling alone — no
+            # "(not yet wired)" suffix needed.
+            return [_MenuItem(a.label, a, stub=not a.wired) for a in actions()]
         if self._level == _ROBOT:
             return [_MenuItem(r.label, r) for r in self._action.robots]
         if self._level == _VARIANT:
@@ -132,17 +169,25 @@ class FmLauncherApp(App):
         ]
 
     def _set_prompt(self) -> None:
-        header = self.query_one(Header)
-        if self._level == _ACTION:
-            header.update("fm_tui launcher — pick an action")
-        elif self._level == _ROBOT:
-            header.update(f"{self._action.label} — pick a robot")
-        elif self._level == _VARIANT:
-            header.update(f"{self._robot.label} — pick a variant")
-        else:
-            header.update(f"{self._action.label} {self._variant} — pick a backend")
+        """Show the navigation trail as a header breadcrumb (action › robot › …)."""
+        crumbs = [
+            crumb
+            for crumb in (
+                self._action.label if self._action else None,
+                self._robot.label if self._robot else None,
+                self._variant,
+            )
+            if crumb
+        ]
+        self.query_one(Header).update(" › ".join(crumbs))
 
     # --- navigation --------------------------------------------------------
+
+    def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
+        """Move the ``▸`` caret to the highlighted row."""
+        for item in self.query_one("#menu", ListView).children:
+            if isinstance(item, _MenuItem):
+                item.set_selected(item is event.item)
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         value = event.item.value

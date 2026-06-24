@@ -10,7 +10,7 @@ setup(
         ("share/ament_index/resource_index/packages", ["resource/" + package_name]),
         ("share/" + package_name, ["package.xml"]),
     ],
-    install_requires=["setuptools", "textual==0.74.0"],
+    install_requires=["setuptools", "textual==0.74.0", "rich"],
     zip_safe=True,
     maintainer="First Motive",
     maintainer_email="nish@ubundi.co.za",
