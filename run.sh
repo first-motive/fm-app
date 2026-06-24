@@ -47,13 +47,17 @@ LAUNCH+=(${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"})
 
 if [[ "$MODE" == native ]]; then
   # Host path: pull siblings + externals once, build in place, open the launcher.
+  set +u  # ROS setup scripts reference unbound vars; nounset would abort the source
   source "/opt/ros/${ROS_DISTRO:-humble}/setup.bash"
+  set -u
   if [[ ! -d external ]]; then
     vcs import < fm-app.repos
   fi
   rosdep install --from-paths . external --ignore-src -y -r 2>/dev/null || true
   colcon build --symlink-install
+  set +u
   source install/setup.bash
+  set -u
   echo ">> opening the fm_tui launcher on the host"
   exec "${LAUNCH[@]}"
 fi
