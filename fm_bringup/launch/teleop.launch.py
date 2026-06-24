@@ -157,7 +157,7 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "model_path",
-                default_value="/ws/fm_teleop/fm_teleop_vision/models/"
+                default_value="/ws/src/fm_teleop/fm_teleop_vision/models/"
                 "pose_landmarker_heavy.task",
                 description="vision input only: MediaPipe pose model path. Default is "
                 "the bind-mounted package models/ dir (download_model.sh writes there). "

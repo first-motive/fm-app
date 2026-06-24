@@ -35,6 +35,7 @@ def _launch_setup(context, *args, **kwargs):
     spec = registry.get(robot)
     variant = LaunchConfiguration("variant").perform(context) or spec.default_variant
     sim_backend = LaunchConfiguration("sim_backend").perform(context)
+    task_env = LaunchConfiguration("task_env").perform(context)
     use_foxglove = LaunchConfiguration("use_foxglove")
 
     if variant not in spec.controllers:
@@ -44,7 +45,13 @@ def _launch_setup(context, *args, **kwargs):
         )
 
     controllers_file = spec.controllers_file(variant)
-    robot_description = spec.build_description(variant, sim_backend, controllers_file)
+    mujoco_model = registry.resolve_task_env_mujoco_model(robot, task_env)
+    robot_description = spec.build_description(
+        variant,
+        sim_backend,
+        controllers_file,
+        mujoco_model=mujoco_model,
+    )
 
     nodes = [
         Node(
@@ -83,8 +90,23 @@ def _launch_setup(context, *args, **kwargs):
             )
         )
 
-    # Backend that hosts the controller_manager. Backend launch files live in
-    # fm_sim_backends (one per engine: mujoco / gazebo / isaac).
+    # SO101 task environments live inside the MuJoCo MJCF only. Publish a matching
+    # MarkerArray so Foxglove can render the table / props from the same task_env alias.
+    if (
+        robot == "so101"
+        and sim_backend != "mujoco"
+        and (task_env or "").strip() not in ("", "default")
+    ):
+        nodes.append(
+            Node(
+                package="fm_bringup",
+                executable="task_env_markers",
+                parameters=[{"robot": robot, "task_env": task_env}],
+                output="screen",
+            )
+        )
+
+    # Backend that hosts the controller_manager.
     backends_dir = os.path.join(
         get_package_share_directory("fm_sim_backends"), "launch"
     )
@@ -110,6 +132,9 @@ def _launch_setup(context, *args, **kwargs):
         if sim_backend in ("mujoco", "isaac"):
             backend_args["robot_description"] = robot_description
             backend_args["controllers_file"] = controllers_file
+        if sim_backend == "mujoco":
+            backend_args["robot"] = robot
+            backend_args["task_env"] = task_env
         nodes.append(
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
@@ -161,6 +186,11 @@ def generate_launch_description():
                 "sim_backend",
                 default_value="mujoco",
                 description="mock | mujoco | gazebo | isaac | real.",
+            ),
+            DeclareLaunchArgument(
+                "task_env",
+                default_value="default",
+                description="Named task environment alias. so101 supports: default | table_reach | pick_place | bin_sort.",
             ),
             DeclareLaunchArgument(
                 "use_foxglove",

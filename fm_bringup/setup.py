@@ -35,6 +35,7 @@ setup(
     entry_points={
         "console_scripts": [
             "bringup = fm_bringup.bringup:main",
+            "task_env_markers = fm_bringup.task_env_markers:main",
         ],
     },
 )

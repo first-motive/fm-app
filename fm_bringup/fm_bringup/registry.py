@@ -27,8 +27,6 @@ from typing import Optional
 import xacro
 from ament_index_python.packages import get_package_share_directory
 
-from fm_sim_models.models import mjcf_path
-
 # --- OpenArm specifics -------------------------------------------------------
 
 # Visual meshes ship as z-up .stl under fm_description (converted at build); the
@@ -46,6 +44,12 @@ _SO101_MESH_SUB = r'filename="package://fm_description/so101_description/assets/
 # Same for the vendored G1-D URDF (relative meshes/... paths).
 _G1_MESH_RE = re.compile(r'filename="meshes/')
 _G1_MESH_SUB = r'filename="package://fm_description/g1_d_description/meshes/'
+
+_SO101_TASK_ENVS = {
+    "table_reach": "table_reach.xml",
+    "pick_place": "pick_place.xml",
+    "bin_sort": "bin_sort.xml",
+}
 
 # foxglove_bridge params shared across robots: the default asset_uri_allowlist ([\w-]
 # only) rejects package:// paths through a dotted directory (e.g. the OpenArm's
@@ -147,7 +151,9 @@ class RobotSpec:
 
     # --- builders ------------------------------------------------------------
 
-    def build_description(self, variant, sim_backend, controllers_file=None):
+    def build_description(
+        self, variant, sim_backend, controllers_file=None, mujoco_model=None
+    ):
         """Process the backend-selectable xacro into a description string.
 
         ``controllers_file`` is baked in only for the gazebo backend, whose
@@ -160,12 +166,10 @@ class RobotSpec:
         # Single-config robots (preset_arg=None) take no preset; the variant is nominal.
         if self.preset_arg:
             mappings[self.preset_arg] = variant
-        # The mujoco backend reads its MJCF from the description's mujoco_model param;
-        # the path is owned by fm_sim_models, not hardcoded in the xacro.
-        if sim_backend == "mujoco":
-            mappings["mujoco_model"] = mjcf_path(self.key)
         if sim_backend == "gazebo" and controllers_file:
             mappings["gazebo_controllers_file"] = controllers_file
+        if mujoco_model:
+            mappings["mujoco_model"] = mujoco_model
         xml = xacro.process_file(xacro_path, mappings=mappings).toxml()
         if self.mesh_rewrite:
             pattern, repl = self.mesh_rewrite
@@ -299,4 +303,74 @@ def get(robot_key):
     except KeyError:
         raise RuntimeError(
             f"Unknown robot '{robot_key}'. Registered: {', '.join(sorted(_ROBOTS))}."
+        )
+
+
+def _so101_task_env_template_path(task_env, workspace_root):
+    filename = _SO101_TASK_ENVS[task_env]
+    candidates = [
+        os.path.join(workspace_root, "fm_sim_models", "assets", "mujoco", "so101", filename),
+        os.path.join(workspace_root, "assets", "mujoco", "so101", filename),
+        os.path.join(
+            get_package_share_directory("fm_sim_models"),
+            "assets",
+            "mujoco",
+            "so101",
+            filename,
+        ),
+    ]
+    for candidate in candidates:
+        if os.path.exists(candidate):
+            return candidate
+    return candidates[-1]
+
+
+def _so101_task_env_runtime_path(task_env, workspace_root):
+    return os.path.join(
+        workspace_root,
+        "external",
+        "so_arm",
+        "Simulation",
+        "SO101",
+        f"fm_task_env_{task_env}.xml",
+    )
+
+
+def _materialize_so101_task_env(task_env, workspace_root="/ws"):
+    template_path = _so101_task_env_template_path(task_env, workspace_root)
+    if not os.path.exists(template_path):
+        raise RuntimeError(
+            f"SO101 task-env template not found: {template_path}. "
+            "Expected a tracked template under fm_sim_models/assets/mujoco/so101/."
+        )
+
+    runtime_path = _so101_task_env_runtime_path(task_env, workspace_root)
+    os.makedirs(os.path.dirname(runtime_path), exist_ok=True)
+
+    with open(template_path, "r", encoding="utf-8") as handle:
+        xml = handle.read()
+    with open(runtime_path, "w", encoding="utf-8") as handle:
+        handle.write(xml)
+    return runtime_path
+
+
+def resolve_task_env_mujoco_model(robot_key, task_env, workspace_root="/ws"):
+    """Map a user-facing task environment alias to a MuJoCo model path."""
+
+    normalized = (task_env or "").strip()
+    if normalized in ("", "default"):
+        return None
+
+    if robot_key != "so101":
+        raise RuntimeError(
+            f"task_env='{normalized}' is only supported for so101. "
+            "Use the robot's default MuJoCo model for other robots."
+        )
+
+    try:
+        return _materialize_so101_task_env(normalized, workspace_root=workspace_root)
+    except KeyError:
+        raise RuntimeError(
+            f"Unknown SO101 task environment '{normalized}'. "
+            f"Available: {', '.join(sorted(_SO101_TASK_ENVS))}, default."
         )
