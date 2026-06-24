@@ -74,14 +74,19 @@ class FmLauncherApp(App):
     .stub {{
         color: $text-disabled;
     }}
-    /* Override Textual's default highlight (a bright-blue cursor bar). The
-       focused selector must match :focus to win on specificity — the menu
-       always holds focus. */
+    /* Override the highlight cursor bar (Textual default, and any theme such as
+       nish-tui, paint it with the accent — often bright blue). Match :focus to
+       win specificity (the menu always holds focus); !important beats the theme
+       variable; the Label rule recolours the row text, which Label sets itself. */
     ListView:focus > ListItem.-highlight,
     ListView > ListItem.-highlight {{
-        background: {PLUM};
-        color: {LILAC};
+        background: {PLUM} !important;
+        color: {LILAC} !important;
         text-style: bold;
+    }}
+    ListView:focus > ListItem.-highlight Label,
+    ListView > ListItem.-highlight Label {{
+        color: {LILAC} !important;
     }}
     """
 
