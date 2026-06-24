@@ -2,14 +2,18 @@
 
 Layout::
 
-    Header
-    ┌ nodes ──────┐ ┌ topics ─────┐
-    │ ...         │ │ ...         │
-    └─────────────┘ └─────────────┘
-    ┌ /rosout ────────────────────┐
-    │ severity-coloured log        │
-    └──────────────────────────────┘
+    ◢ FIRST MOTIVE · FM_TUI          ROS2 ● LIVE · N nodes
+    ┏ NODES · N ──┓ ┏ TOPICS · N ─┓
+    ┃ ...         ┃ ┃ ...         ┃
+    ┗━━━━━━━━━━━━━┛ ┗━━━━━━━━━━━━━┛
+    ┏ /ROSOUT ────────────────────┓
+    ┃ time ● SEV  message          ┃
+    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
     Footer
+
+A branded status bar tops the screen: brand mark left, live ROS link and node
+count right (``○ OFFLINE`` until the graph connects). Panels badge their live
+counts; the ``/rosout`` log aligns each line by severity glyph.
 
 Widgets come from the theming layer (``fm_tui.theme``): nish-tui's themed set
 when it is installed, plain fallback twins otherwise. Live data comes from

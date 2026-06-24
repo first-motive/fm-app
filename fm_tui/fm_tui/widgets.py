@@ -50,7 +50,7 @@ class Header(Static):
         self._render_bar()
 
     def set_status(self, connected: bool, node_count: int = 0) -> None:
-        """Paint the right zone: ``● LIVE · N nodes`` or ``○ OFFLINE``."""
+        """Paint the right zone: ``ROS2 ● LIVE · N nodes`` or ``ROS2 ○ OFFLINE``."""
         self._connected = connected
         self._node_count = node_count
         self._render_bar()

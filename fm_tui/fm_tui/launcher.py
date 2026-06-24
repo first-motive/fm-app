@@ -5,13 +5,13 @@ walks the declarative :mod:`fm_tui.registry` — action -> robot -> variant, plu
 backend step for sim/teleop actions — then dispatches the matching ``ros2 launch``
 for wired actions::
 
-    Header
-    ┌ menu ───────────────────────────┐
-    │ > Robot Description              │   ← action level
-    │   Teleop            (not yet wired)
-    │   Autonomous        (not yet wired)
-    └──────────────────────────────────┘
-    Footer   ↑↓ move · enter select · esc back · q quit
+    ◢ FIRST MOTIVE · ROBOT DESCRIPTION › G1_D
+    ┏ MENU ────────────────────────────┓
+    ┃ ▸ Robot Description               ┃   ← caret marks the highlighted row
+    ┃   Teleop            (not yet wired)┃
+    ┃   Autonomous        (not yet wired)┃
+    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+    Footer   [Q] QUIT   [ESC] BACK
 
 Dispatch handoff: selecting a variant exits the Textual app with the ``ros2
 launch`` argv as its return value. :func:`main` then runs that command, so the
