@@ -74,6 +74,13 @@ class FmLauncherApp(App):
     Screen {{
         padding: 1 2;
     }}
+    /* Wrap the menu to its rows instead of stretching (ListView defaults to
+       height: 1fr); cap at the viewport so a long list scrolls inside the box
+       rather than pushing it past the terminal bottom. */
+    #menu {{
+        height: auto;
+        max-height: 100%;
+    }}
     .stub {{
         color: $text-disabled;
     }}
