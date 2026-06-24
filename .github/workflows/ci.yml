@@ -73,3 +73,30 @@ jobs:
           # Test only our packages — the built externals carry their own (upstream) tests.
           colcon test --packages-select $(colcon list --names-only | grep '^fm_')
           colcon test-result --verbose
+
+  image:
+    name: build image (FROM fm-robot layer)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # The fm-robot base lives in a private-by-default GHCR package; log in to
+      # pull it for the FROM.
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # No headless TUI smoke: fm_tui_launcher is an interactive TUI that needs a
+      # tty, so a headless "launch" proves nothing. Instead this job is the smoke —
+      # it proves the full-stack image (the sim + teleop union FROM the robot
+      # layer) actually builds. The workspace build + import live in build-test
+      # above; the launcher itself is exercised interactively, not in CI.
+      - name: Build the full-stack image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: fm-app:humble
