@@ -30,16 +30,23 @@ fire on the host before the container exists, so run.sh runs this through
 
 from __future__ import annotations
 
+import os
 import sys
 
 from rich.console import Console
 from rich.style import Style
 from rich.text import Text
 
+# run.sh runs this file by path on the host (`python3 .../fm_tui/banner.py`),
+# where the fm_tui package is not yet on sys.path. Put its parent dir on the
+# path so the palette import below resolves whether run as a module or a script.
+if __package__ in (None, ""):
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 # Palette lives in fm_tui.palette so run.sh and the TUI share one source of
 # brand colour. Re-exported here for callers (and tests) that read them off the
 # banner module.
-from fm_tui.palette import CREAM, LILAC, PLUM, ROLES, SAND  # noqa: F401
+from fm_tui.palette import CREAM, LILAC, PLUM, ROLES, SAND  # noqa: E402,F401
 
 
 def emit(number, title: str, role: str = "step", *, console: Console | None = None) -> None:
