@@ -93,6 +93,7 @@ class BorderedPanel(Container):
         border-title-color: {SAND};
         height: auto;
         padding: 0 1;
+        margin: 1 1;
     }}
     """
 

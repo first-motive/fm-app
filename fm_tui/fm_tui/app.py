@@ -38,6 +38,12 @@ class FmTuiApp(App):
 
     TITLE = "fm_tui"
     BINDINGS = [("q", "quit", "Quit")]
+    # Inset the whole screen so the panel borders breathe off the terminal edge.
+    CSS = """
+    Screen {
+        padding: 1 2;
+    }
+    """
 
     def __init__(self, connect_ros: bool = True, **kwargs) -> None:
         super().__init__(**kwargs)

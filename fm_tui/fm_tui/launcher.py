@@ -71,6 +71,9 @@ class FmLauncherApp(App):
         ("escape", "back", "BACK"),
     ]
     CSS = f"""
+    Screen {{
+        padding: 1 2;
+    }}
     .stub {{
         color: $text-disabled;
     }}
