@@ -30,6 +30,7 @@ import subprocess
 from textual.app import App, ComposeResult
 from textual.widgets import Footer, Label, ListItem, ListView
 
+from fm_tui.palette import LILAC
 from fm_tui.registry import Action, Robot, actions
 from fm_tui.theme import BorderedPanel, Header, apply_theme
 
@@ -39,13 +40,25 @@ _ACTION, _ROBOT, _VARIANT, _BACKEND = "action", "robot", "variant", "backend"
 
 
 class _MenuItem(ListItem):
-    """A list row carrying the registry object (or variant string) it selects."""
+    """A list row carrying the registry object (or variant string) it selects.
+
+    The row reserves a two-column gutter for the selection caret so highlighting
+    a row does not shift its text; :meth:`set_selected` fills the gutter.
+    """
 
     def __init__(self, text: str, value: object, *, stub: bool = False) -> None:
-        super().__init__(Label(text))
+        self._text = text
+        self._display = f"  {text}"
+        self._label = Label(self._display)
+        super().__init__(self._label)
         self.value = value
         if stub:
             self.add_class("stub")
+
+    def set_selected(self, selected: bool) -> None:
+        """Show the ``▸`` caret on the highlighted row, blank gutter otherwise."""
+        self._display = f"{'▸' if selected else ' '} {self._text}"
+        self._label.update(self._display)
 
 
 @apply_theme
@@ -54,13 +67,17 @@ class FmLauncherApp(App):
 
     TITLE = "fm_tui launcher"
     BINDINGS = [
-        ("q", "quit", "Quit"),
-        ("escape", "back", "Back"),
+        ("q", "quit", "QUIT"),
+        ("escape", "back", "BACK"),
     ]
-    CSS = """
-    .stub {
+    CSS = f"""
+    .stub {{
         color: $text-disabled;
-    }
+    }}
+    ListView > ListItem.-highlight {{
+        color: {LILAC};
+        text-style: bold;
+    }}
     """
 
     def __init__(self, **kwargs) -> None:
@@ -71,7 +88,7 @@ class FmLauncherApp(App):
         self._variant: str | None = None
 
     def compose(self) -> ComposeResult:
-        yield Header("fm_tui launcher — pick an action")
+        yield Header()
         with BorderedPanel(title="menu"):
             yield ListView(id="menu")
         yield Footer()
@@ -132,17 +149,25 @@ class FmLauncherApp(App):
         ]
 
     def _set_prompt(self) -> None:
-        header = self.query_one(Header)
-        if self._level == _ACTION:
-            header.update("fm_tui launcher — pick an action")
-        elif self._level == _ROBOT:
-            header.update(f"{self._action.label} — pick a robot")
-        elif self._level == _VARIANT:
-            header.update(f"{self._robot.label} — pick a variant")
-        else:
-            header.update(f"{self._action.label} {self._variant} — pick a backend")
+        """Show the navigation trail as a header breadcrumb (action › robot › …)."""
+        crumbs = [
+            crumb
+            for crumb in (
+                self._action.label if self._action else None,
+                self._robot.label if self._robot else None,
+                self._variant,
+            )
+            if crumb
+        ]
+        self.query_one(Header).update(" › ".join(crumbs))
 
     # --- navigation --------------------------------------------------------
+
+    def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
+        """Move the ``▸`` caret to the highlighted row."""
+        for item in self.query_one("#menu", ListView).children:
+            if isinstance(item, _MenuItem):
+                item.set_selected(item is event.item)
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         value = event.item.value

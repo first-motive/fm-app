@@ -10,6 +10,7 @@ from textual.widgets import ListView
 
 from fm_tui.launcher import FmLauncherApp
 from fm_tui.registry import actions
+from fm_tui.theme import Header
 
 
 def test_menu_builds_from_registry():
@@ -99,6 +100,31 @@ def test_first_row_highlighted_after_each_level():
             # Robot level: first row highlighted immediately on entry.
             assert menu.index == 0
             assert menu.highlighted_child is menu.children[0]
+
+    asyncio.run(go())
+
+
+def test_caret_marks_only_the_highlighted_row():
+    async def go():
+        async with FmLauncherApp().run_test() as pilot:
+            await pilot.pause()
+            menu = pilot.app.query_one("#menu", ListView)
+            assert menu.children[0]._display.startswith("▸")
+            assert menu.children[1]._display.startswith("  ")
+
+    asyncio.run(go())
+
+
+def test_header_breadcrumb_tracks_navigation():
+    async def go():
+        async with FmLauncherApp().run_test() as pilot:
+            await pilot.pause()
+            header = pilot.app.query_one(Header)
+            # Action level: no trail yet.
+            assert header._title == ""
+            await pilot.press("enter")  # robot_description -> robot level
+            await pilot.pause()
+            assert header._title == actions()[0].label
 
     asyncio.run(go())
 
