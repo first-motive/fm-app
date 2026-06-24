@@ -30,7 +30,7 @@ import subprocess
 from textual.app import App, ComposeResult
 from textual.widgets import Footer, Label, ListItem, ListView
 
-from fm_tui.palette import LILAC
+from fm_tui.palette import LILAC, PLUM
 from fm_tui.registry import Action, Robot, actions
 from fm_tui.theme import BorderedPanel, Header, apply_theme
 
@@ -75,8 +75,12 @@ class FmLauncherApp(App):
         color: $text-disabled;
     }}
     ListView > ListItem.-highlight {{
+        background: {PLUM};
         color: {LILAC};
         text-style: bold;
+    }}
+    ListView > ListItem.-highlight Label {{
+        color: {LILAC};
     }}
     """
 
