@@ -96,7 +96,12 @@ class BorderedPanel(Container):
 
     def __init__(self, *children, title: str = "", **kwargs) -> None:
         super().__init__(*children, **kwargs)
-        self.border_title = title.upper()
+        self._base_title = title.upper()
+        self.border_title = self._base_title
+
+    def set_count(self, count: int) -> None:
+        """Badge the title with a live count (``NODES · 12``); 0 drops the badge."""
+        self.border_title = f"{self._base_title} · {count}" if count else self._base_title
 
 
 class LogView(RichLog):

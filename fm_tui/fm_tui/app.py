@@ -43,9 +43,9 @@ class FmTuiApp(App):
     def compose(self) -> ComposeResult:
         yield Header("fm_tui — ROS2 monitor")
         with Horizontal():
-            with BorderedPanel(title="nodes"):
+            with BorderedPanel(title="nodes", id="nodes-panel"):
                 yield Static(id="nodes")
-            with BorderedPanel(title="topics"):
+            with BorderedPanel(title="topics", id="topics-panel"):
                 yield Static(id="topics")
         with BorderedPanel(title="/rosout"):
             yield LogView(id="rosout")
@@ -78,6 +78,8 @@ class FmTuiApp(App):
         topics = self._ros.topics()
         self.query_one("#nodes", Static).update("\n".join(nodes) or "(none)")
         self.query_one("#topics", Static).update("\n".join(topics) or "(none)")
+        self.query_one("#nodes-panel", BorderedPanel).set_count(len(nodes))
+        self.query_one("#topics-panel", BorderedPanel).set_count(len(topics))
         self.query_one(Header).set_status(connected=True, node_count=len(nodes))
 
     def on_unmount(self) -> None:

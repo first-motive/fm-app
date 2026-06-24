@@ -12,6 +12,19 @@ def test_border_title_is_uppercased():
     assert BorderedPanel(title="nodes").border_title == "NODES"
 
 
+def test_panel_count_badge():
+    panel = BorderedPanel(title="nodes")
+    panel.set_count(12)
+    assert panel.border_title == "NODES · 12"
+
+
+def test_panel_empty_count_drops_badge():
+    panel = BorderedPanel(title="nodes")
+    panel.set_count(12)
+    panel.set_count(0)
+    assert panel.border_title == "NODES"
+
+
 def test_header_live_status_shows_node_count():
     status = Header("fm_tui")._status_text(connected=True, node_count=12)
     assert "LIVE" in status.plain
