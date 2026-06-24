@@ -34,6 +34,7 @@ class Header(Static):
         background: {PLUM};
         height: 1;
         padding: 0 1;
+        margin: 1 1 0 1;
     }}
     """
 
