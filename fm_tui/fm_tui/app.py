@@ -15,7 +15,7 @@ A branded status bar tops the screen: brand mark left, live ROS link and node
 count right (``○ OFFLINE`` until the graph connects). Panels badge their live
 counts; the ``/rosout`` log aligns each line by severity glyph.
 
-Widgets come from the theming layer (``fm_tui.theme``): nish-tui's themed set
+Widgets come from the theming layer (``fm_tools.tui``): nish-tui's themed set
 when it is installed, plain fallback twins otherwise. Live data comes from
 ``fm_tui.ros.RosBridge``, which spins a rclpy node on a background thread.
 """
@@ -26,7 +26,7 @@ from textual.app import App, ComposeResult
 from textual.containers import Horizontal
 from textual.widgets import Footer, Static
 
-from fm_tui.theme import BorderedPanel, Header, LogView, apply_theme
+from fm_tools.tui import BorderedPanel, Header, LogView, apply_theme
 
 # How often to refresh the node and topic lists, in seconds.
 _GRAPH_REFRESH_SECONDS = 2.0

@@ -10,10 +10,9 @@ from textual.widgets import ListView
 
 from textual.color import Color
 
-from fm_tui import palette
+from fm_tools.tui import Header, palette
 from fm_tui.launcher import FmLauncherApp
 from fm_tui.registry import actions
-from fm_tui.theme import Header
 
 
 def test_menu_builds_from_registry():
