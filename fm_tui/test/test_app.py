@@ -3,7 +3,7 @@
 import asyncio
 
 from fm_tui.app import FmTuiApp
-from fm_tui.theme import Header
+from fm_tools.tui import Header
 
 
 def test_app_mounts_all_panels():

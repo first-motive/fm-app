@@ -83,10 +83,11 @@ pip install nish-tui
 ```
 
 No configuration follows — the swap is automatic. The resolver lives in
-`fm_tui/theme.py`; the fallback twins in `fm_tui/widgets.py` mirror the nish-tui
-widget API so the app code never branches on availability. The fallback twins
-carry the First Motive palette (`fm_tui/palette.py`), the same source the run.sh
-step banners paint from, so the bare TUI stays on-brand.
+`fm_tools.tui.theme`; the fallback twins in `fm_tools.tui.widgets` mirror the
+nish-tui widget API so the app code never branches on availability. The fallback
+twins carry the First Motive palette (`fm_tools.tui.palette`), the same source the
+run.sh step banners paint from, so the bare TUI stays on-brand. These now live in
+the shared `fm-tools` wheel, not in `fm_tui`.
 
 ## Terminal Font
 

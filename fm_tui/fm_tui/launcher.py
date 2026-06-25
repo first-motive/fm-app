@@ -20,7 +20,7 @@ launch inherits the real terminal (the container entrypoint has already sourced
 ROS + the overlay). Stub actions carry no launch spec; selecting one shows a
 notice and never dispatches.
 
-Widgets come from the theming layer (:mod:`fm_tui.theme`) so the launcher shares
+Widgets come from the theming layer (:mod:`fm_tools.tui`) so the launcher shares
 the monitor's look, themed or bare.
 """
 
@@ -31,9 +31,10 @@ import subprocess
 from textual.app import App, ComposeResult
 from textual.widgets import Footer, Label, ListItem, ListView
 
-from fm_tui.palette import LILAC, PLUM
+from fm_tools.tui import BorderedPanel, Header, apply_theme
+from fm_tools.tui.palette import LILAC, PLUM
+
 from fm_tui.registry import Action, Robot, actions
-from fm_tui.theme import BorderedPanel, Header, apply_theme
 
 # Navigation levels, in walk order. Wired sim/teleop actions add a backend step
 # after the variant; robot_description dispatches straight from the variant.

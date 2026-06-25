@@ -39,6 +39,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Python deps colcon does not resolve: the MuJoCo physics engine the sim core
-# drives, and textual — fm_tui's TUI framework. The textual pin tracks
-# fm_tui/setup.py (textual==0.74.0); keep the two in lockstep.
-RUN pip install --no-cache-dir mujoco textual==0.74.0
+# drives, textual — fm_tui's TUI framework — and fm-tools, the shared wheel that
+# carries fm_tui's brand, widgets, and pick menu (SHA-pinned git install == tag
+# v0.1.0). The textual pin tracks fm_tui/setup.py (textual==0.74.0); keep the two
+# in lockstep, and the fm-tools SHA in lockstep with fm_tui/setup.py.
+RUN pip install --no-cache-dir mujoco textual==0.74.0 \
+      "fm-tools @ git+https://github.com/first-motive/fm-tools@3523b395365909d1b3b49e82f83cebc931910ae4"
