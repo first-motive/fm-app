@@ -129,6 +129,17 @@ class RobotSpec:
     def servo_params_file(self):
         return self._config(self.servo_config)
 
+    def pose_tracking_params_file(self):
+        """Abs path to pose_tracking.yaml (PoseTracking PID + command_in_type deltas over
+        servo.yaml, for the vision 1:1 mirror path). May not exist for every robot."""
+        return self._config("pose_tracking.yaml")
+
+    def vision_params_file(self):
+        """Abs path to vision.yaml (hand_tracker + mirror_source params for input:=mirror —
+        rotate_deg, mirror_gain, workspace box). May not exist for every robot; callers
+        guard with os.path.exists and fall back to the node defaults."""
+        return self._config("vision.yaml")
+
     def servo_nodes(self):
         """Return ``[(node_name, servo.yaml abs path), ...]`` — primary plus extras.
 
