@@ -45,3 +45,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # in lockstep, and the fm-tools SHA in lockstep with fm_tui/setup.py.
 RUN pip install --no-cache-dir mujoco textual==0.74.0 \
       "fm-tools @ git+https://github.com/first-motive/fm-tools@5d9ef62f9449321730b8ebcacef7be3bc13448f5"
+
+# fm_teleop_vision camera hand-tracking (input:=vision and input:=mirror). Large wheel,
+# pulls opencv (cv2) + protobuf/numpy, so it caches as its own layer. Pin needs an arm64
+# cp310 wheel (Ubuntu 22.04 / Python 3.10 on the linux/arm64 Mac target).
+RUN pip install --no-cache-dir mediapipe==0.10.14
