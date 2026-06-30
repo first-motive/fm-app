@@ -130,7 +130,7 @@ jobs:
       # layer) actually builds. fm-ros2 pulls this image, so publish it multi-arch
       # (arm64 + amd64) to GHCR on main; branch and PR runs build without pushing.
       - name: Build + publish the full-stack image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/amd64,linux/arm64
