@@ -38,6 +38,34 @@ colcon test && colcon test-result --verbose
 Sibling repos track `main` — fast inner loop while every repo churns together
 early; revisit exact-commit pinning at the first release.
 
+## Run
+
+`run.sh` is the standalone front door: it builds the workspace and opens the
+`fm_tui` launcher, an arrow-key menu that picks the action, robot, and backend
+itself and dispatches the launch. Because the TUI does the selecting, `run.sh`
+takes no `--robot` flag. The host OS picks the path, overridable with `--native`
+/ `--container`:
+
+```text
+Linux  -> native     build + launch on the host (needs ROS2 Humble installed)
+Darwin -> container  build the fm-app image, run it via the fm-docker overlays
+```
+
+```bash
+./run.sh                     # auto-detect, open the launcher
+./run.sh --native            # force the host path (Linux)
+./run.sh --container         # force the container path (macOS / OrbStack)
+```
+
+The container path imports the shared compose overlays from
+[`fm-docker`](https://github.com/first-motive/fm-docker) into `docker/` (via
+`fm-app.repos`) and builds this repo's `Dockerfile` — the full-stack launcher
+image, `FROM` the `fm-robot` layer, reconverging the sim + teleop deps because
+the launcher drives every backend. The launcher is an interactive TUI, so the
+container path runs it through an interactive `docker compose exec` (a tty). Tear
+down the container with
+`docker compose -f docker/compose.yaml -f docker/compose.macos.yaml down`.
+
 ## Architecture
 
 `fm_tui` is the launcher an operator drives; `fm_bringup` is the composition root

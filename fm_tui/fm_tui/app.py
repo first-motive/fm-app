@@ -2,16 +2,20 @@
 
 Layout::
 
-    Header
-    ┌ nodes ──────┐ ┌ topics ─────┐
-    │ ...         │ │ ...         │
-    └─────────────┘ └─────────────┘
-    ┌ /rosout ────────────────────┐
-    │ severity-coloured log        │
-    └──────────────────────────────┘
+    ◢ FIRST MOTIVE · FM_TUI          ROS2 ● LIVE · N nodes
+    ┏ NODES · N ──┓ ┏ TOPICS · N ─┓
+    ┃ ...         ┃ ┃ ...         ┃
+    ┗━━━━━━━━━━━━━┛ ┗━━━━━━━━━━━━━┛
+    ┏ /ROSOUT ────────────────────┓
+    ┃ time ● SEV  message          ┃
+    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
     Footer
 
-Widgets come from the theming layer (``fm_tui.theme``): nish-tui's themed set
+A branded status bar tops the screen: brand mark left, live ROS link and node
+count right (``○ OFFLINE`` until the graph connects). Panels badge their live
+counts; the ``/rosout`` log aligns each line by severity glyph.
+
+Widgets come from the theming layer (``fm_tools.tui``): nish-tui's themed set
 when it is installed, plain fallback twins otherwise. Live data comes from
 ``fm_tui.ros.RosBridge``, which spins a rclpy node on a background thread.
 """
@@ -22,7 +26,7 @@ from textual.app import App, ComposeResult
 from textual.containers import Horizontal
 from textual.widgets import Footer, Static
 
-from fm_tui.theme import BorderedPanel, Header, LogView, apply_theme
+from fm_tools.tui import BorderedPanel, Header, LogView, apply_theme
 
 # How often to refresh the node and topic lists, in seconds.
 _GRAPH_REFRESH_SECONDS = 2.0
@@ -34,6 +38,12 @@ class FmTuiApp(App):
 
     TITLE = "fm_tui"
     BINDINGS = [("q", "quit", "Quit")]
+    # Inset the whole screen so the panel borders breathe off the terminal edge.
+    CSS = """
+    Screen {
+        padding: 1 2;
+    }
+    """
 
     def __init__(self, connect_ros: bool = True, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -43,9 +53,9 @@ class FmTuiApp(App):
     def compose(self) -> ComposeResult:
         yield Header("fm_tui — ROS2 monitor")
         with Horizontal():
-            with BorderedPanel(title="nodes"):
+            with BorderedPanel(title="nodes", id="nodes-panel"):
                 yield Static(id="nodes")
-            with BorderedPanel(title="topics"):
+            with BorderedPanel(title="topics", id="topics-panel"):
                 yield Static(id="topics")
         with BorderedPanel(title="/rosout"):
             yield LogView(id="rosout")
@@ -54,6 +64,7 @@ class FmTuiApp(App):
     def on_mount(self) -> None:
         self.query_one("#nodes", Static).update("(connecting…)")
         self.query_one("#topics", Static).update("(connecting…)")
+        self.query_one(Header).set_status(connected=False)
         if not self._connect_ros:
             return
         # Import here so the app still constructs (and tests still run) without
@@ -77,6 +88,9 @@ class FmTuiApp(App):
         topics = self._ros.topics()
         self.query_one("#nodes", Static).update("\n".join(nodes) or "(none)")
         self.query_one("#topics", Static).update("\n".join(topics) or "(none)")
+        self.query_one("#nodes-panel", BorderedPanel).set_count(len(nodes))
+        self.query_one("#topics-panel", BorderedPanel).set_count(len(topics))
+        self.query_one(Header).set_status(connected=True, node_count=len(nodes))
 
     def on_unmount(self) -> None:
         if self._ros is not None:

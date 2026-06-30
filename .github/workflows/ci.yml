@@ -12,6 +12,30 @@ on:
 # repos plus the externals they consume. The siblings are private, so mint a
 # short-lived GitHub App token (fm-ros2-ci, Contents:read) to clone them.
 jobs:
+  selftest:
+    name: bootstrap self-test (curl|bash FM_SELFTEST)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # install.sh and run.sh are curl|bash-able. Run each from an empty dir so it
+      # takes its network branch — the piped path real users hit — fetching lib.sh
+      # from the pinned fm-tools tag. FM_SELFTEST stops each script after deps load
+      # and OS/mode resolve, before any OrbStack install, build, or launch.
+      - name: install.sh + run.sh load lib + resolve over piped curl
+        run: |
+          set -euo pipefail
+          repo="$PWD"
+          cd "$(mktemp -d)"
+          for s in install.sh run.sh; do
+            echo "== $s =="
+            out="$(cat "$repo/$s" | FM_SELFTEST=1 bash 2>&1)" \
+              || { echo "$out"; echo "FAIL: $s exited non-zero under curl|bash"; exit 1; }
+            echo "$out"
+            echo "$out" | grep -q "selftest ok" \
+              || { echo "FAIL: $s did not reach 'selftest ok'"; exit 1; }
+          done
+          echo "bootstrap self-test OK"
+
   build-test:
     name: build + test (humble)
     runs-on: ubuntu-latest
@@ -24,7 +48,7 @@ jobs:
         with:
           path: src/fm-app
 
-      - uses: actions/create-github-app-token@v1
+      - uses: actions/create-github-app-token@v3
         id: app-token
         with:
           app-id: ${{ secrets.FM_CI_APP_ID }}
@@ -56,9 +80,11 @@ jobs:
             ros-humble-rosidl-generator-dds-idl \
             ros-humble-cyclonedds ros-humble-rmw-cyclonedds-cpp
           # Python deps colcon does not resolve: fm_tui's TUI framework + the sim
-          # core's physics engine (matches docker/Dockerfile.base in fm-ros2).
+          # core's physics engine (matches docker/Dockerfile.base in fm-ros2), and
+          # fm-tools — the shared wheel fm_tui imports (SHA-pinned == v0.1.0).
           apt-get install -y python3-pip
-          python3 -m pip install --no-cache-dir mujoco textual==0.74.0
+          python3 -m pip install --no-cache-dir mujoco textual==0.74.0 \
+            "fm-tools @ git+https://github.com/first-motive/fm-tools@5d9ef62f9449321730b8ebcacef7be3bc13448f5"
           rosdep update
           rosdep install --from-paths src external --ignore-src -y -r
 
@@ -73,3 +99,42 @@ jobs:
           # Test only our packages — the built externals carry their own (upstream) tests.
           colcon test --packages-select $(colcon list --names-only | grep '^fm_')
           colcon test-result --verbose
+
+  image:
+    name: build + publish image (FROM fm-robot layer)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # Log in to GHCR — to pull the private fm-robot base FROM and to push this
+      # layer.
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # No headless TUI smoke: fm_tui_launcher is an interactive TUI that needs a
+      # tty, so a headless "launch" proves nothing. Instead this job is the smoke —
+      # it proves the full-stack image (the sim + teleop union FROM the robot
+      # layer) actually builds. fm-ros2 pulls this image, so publish it multi-arch
+      # (arm64 + amd64) to GHCR on main; branch and PR runs build without pushing.
+      - name: Build + publish the full-stack image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.ref == 'refs/heads/main' }}
+          tags: ghcr.io/first-motive/fm-app:humble
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

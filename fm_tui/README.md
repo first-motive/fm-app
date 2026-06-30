@@ -47,13 +47,23 @@ two doors onto one launch file.
 ## Layout
 
 ```
-Header
-┌ nodes ──────┐ ┌ topics ─────┐
-└─────────────┘ └─────────────┘
-┌ /rosout ────────────────────┐   debug·grey  info·green  warn·amber  error·red
-└──────────────────────────────┘
-Footer
+◢ FIRST MOTIVE · FM_TUI — ROS2 MONITOR        ROS2 ● LIVE · 12 nodes
+┏━ NODES · 12 ━━━━━━━┓ ┏━ TOPICS · 34 ━━━━┓
+┃ /controller_node  ┃ ┃ /joint_states    ┃
+┗━━━━━━━━━━━━━━━━━━━━┛ ┗━━━━━━━━━━━━━━━━━━┛
+┏━ /ROSOUT ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ 12:04:51 ● INFO  bringup ready          ┃
+┃ 12:04:52 ▲ WARN  battery low            ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ [Q] QUIT   [↑↓] MOVE
 ```
+
+A branded status bar tops the monitor: brand mark left, live ROS link right
+(`ROS2 ● LIVE · N nodes`, or `ROS2 ○ OFFLINE` before the graph connects). Panels
+badge their live counts (`NODES · 12`); `/rosout` aligns each line as a dim
+timestamp, severity glyph, severity, then the message.
+
+Severity glyphs: `info ●` · `warn ▲` · `error ✕` · `debug ·`.
 
 ## Theming — nish-tui (optional, recommended)
 
@@ -73,8 +83,21 @@ pip install nish-tui
 ```
 
 No configuration follows — the swap is automatic. The resolver lives in
-`fm_tui/theme.py`; the fallback twins in `fm_tui/widgets.py` mirror the nish-tui
-widget API so the app code never branches on availability.
+`fm_tools.tui.theme`; the fallback twins in `fm_tools.tui.widgets` mirror the
+nish-tui widget API so the app code never branches on availability. The fallback
+twins carry the First Motive palette (`fm_tools.tui.palette`), the same source the
+run.sh step banners paint from, so the bare TUI stays on-brand. These now live in
+the shared `fm-tools` wheel, not in `fm_tui`.
+
+## Terminal Font
+
+fm_tui sets its brand colour, glyphs, and layout — but not the typeface. A
+terminal app draws with whatever font the terminal emulator is configured to
+use; it cannot ship its own. For the on-brand match with the
+[d2 diagrams](https://github.com/first-motive/fm-ros2/tree/main/docs/diagrams),
+set your terminal profile to **Geist Mono** (the First Motive brand mono). Any
+monospace font with box-drawing and symbol coverage renders the heavy borders
+and severity glyphs (`◢ ● ▲ ✕ · ┏ ━`) cleanly.
 
 ## Build Type
 

@@ -8,6 +8,9 @@ import asyncio
 
 from textual.widgets import ListView
 
+from textual.color import Color
+
+from fm_tools.tui import Header, palette
 from fm_tui.launcher import FmLauncherApp
 from fm_tui.registry import actions
 
@@ -51,7 +54,7 @@ def test_backend_path_dispatches_with_sim_backend():
         async with FmLauncherApp().run_test() as pilot:
             await pilot.pause()
             menu = pilot.app.query_one("#menu", ListView)
-            menu.index = 1  # Simulation (wired, has backends)
+            menu.index = 3  # Simulation (last, wired, has backends)
             await pilot.press("enter")  # action -> robot (g1_d, first in the sim list)
             await pilot.press("enter")  # robot -> variant (g1_d)
             await pilot.press("enter")  # variant -> backend (mujoco default)
@@ -75,7 +78,7 @@ def test_stub_does_not_dispatch():
         async with FmLauncherApp().run_test() as pilot:
             await pilot.pause()
             menu = pilot.app.query_one("#menu", ListView)
-            menu.index = 3  # autonomous (stub)
+            menu.index = 2  # autonomous (stub)
             await pilot.press("enter")
             await pilot.pause()
             # No dispatch: app still running on the action level, no exit value.
@@ -99,6 +102,49 @@ def test_first_row_highlighted_after_each_level():
             # Robot level: first row highlighted immediately on entry.
             assert menu.index == 0
             assert menu.highlighted_child is menu.children[0]
+
+    asyncio.run(go())
+
+
+def test_selected_row_highlight_is_plum_not_blue():
+    # Guards the recurring "selected row is blue" bug: the highlight CSS must
+    # repaint the row background plum, overriding Textual's blue accent.
+    async def go():
+        async with FmLauncherApp().run_test() as pilot:
+            await pilot.pause()
+            menu = pilot.app.query_one("#menu", ListView)
+            highlighted = [
+                row
+                for row in menu.children
+                if row.has_class("-highlight") or row.has_class("--highlight")
+            ]
+            assert highlighted, "no highlighted row"
+            assert highlighted[0].styles.background == Color.parse(palette.PLUM)
+
+    asyncio.run(go())
+
+
+def test_caret_marks_only_the_highlighted_row():
+    async def go():
+        async with FmLauncherApp().run_test() as pilot:
+            await pilot.pause()
+            menu = pilot.app.query_one("#menu", ListView)
+            assert menu.children[0]._display.startswith("▸")
+            assert menu.children[1]._display.startswith("  ")
+
+    asyncio.run(go())
+
+
+def test_header_breadcrumb_tracks_navigation():
+    async def go():
+        async with FmLauncherApp().run_test() as pilot:
+            await pilot.pause()
+            header = pilot.app.query_one(Header)
+            # Action level: no trail yet.
+            assert header._title == ""
+            await pilot.press("enter")  # robot_description -> robot level
+            await pilot.pause()
+            assert header._title == actions()[0].label
 
     asyncio.run(go())
 

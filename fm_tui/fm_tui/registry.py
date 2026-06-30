@@ -169,13 +169,6 @@ ACTIONS: tuple[Action, ...] = (
         robots=_ROBOTS,
     ),
     Action(
-        key="simulation",
-        label="Simulation",
-        launch=_SIM,
-        robots=_SIM_ROBOTS,
-        backends=_SIM_BACKENDS,
-    ),
-    Action(
         key="teleop",
         label="Teleop",
         launch=_TELEOP,
@@ -184,6 +177,13 @@ ACTIONS: tuple[Action, ...] = (
     ),
     # Stub — planned surface, no launch graph yet. launch=None renders disabled.
     Action(key="autonomous", label="Autonomous"),
+    Action(
+        key="simulation",
+        label="Simulation",
+        launch=_SIM,
+        robots=_SIM_ROBOTS,
+        backends=_SIM_BACKENDS,
+    ),
 )
 
 

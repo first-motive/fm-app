@@ -10,7 +10,16 @@ setup(
         ("share/ament_index/resource_index/packages", ["resource/" + package_name]),
         ("share/" + package_name, ["package.xml"]),
     ],
-    install_requires=["setuptools", "textual==0.74.0"],
+    install_requires=[
+        "setuptools",
+        "textual==0.74.0",
+        "rich",
+        # Brand, widgets, and the pick menu — carved out into the shared wheel.
+        # SHA-pinned git install (== tag v0.1.0), matching the sibling externals'
+        # immutable pinning; pip resolves it, colcon does not, so the Dockerfile
+        # installs it too. PyPI-ready: swap for a version spec once published.
+        "fm-tools @ git+https://github.com/first-motive/fm-tools@5d9ef62f9449321730b8ebcacef7be3bc13448f5",
+    ],
     zip_safe=True,
     maintainer="First Motive",
     maintainer_email="nish@ubundi.co.za",
