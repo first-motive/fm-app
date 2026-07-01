@@ -47,6 +47,13 @@ _SO101_MESH_SUB = r'filename="package://fm_description/so101_description/assets/
 _G1_MESH_RE = re.compile(r'filename="meshes/')
 _G1_MESH_SUB = r'filename="package://fm_description/g1_d_description/meshes/'
 
+# The vendored Axol URDF references meshes as package://assembly/... (its Onshape
+# export package name). Rewrite the "assembly" package to fm_description/axol_description
+# so robot_state_publisher serves them to Foxglove — matching where fm_description
+# installs them and the _build_axol rewrite in view_robot.launch.py.
+_AXOL_MESH_RE = re.compile(r'filename="package://assembly/')
+_AXOL_MESH_SUB = r'filename="package://fm_description/axol_description/'
+
 # foxglove_bridge params shared across robots: the default asset_uri_allowlist ([\w-]
 # only) rejects package:// paths through a dotted directory (e.g. the OpenArm's
 # openarm_v2.0), so nothing renders; [-\w.] admits the dot. send_buffer_limit is
@@ -299,6 +306,41 @@ _ROBOTS = {
         # Servo drives 14 of the G1-D's 34 joints; fill the rest so the planning scene
         # completes (see full_state_jsp above).
         full_state_jsp=True,
+    ),
+    "axol": RobotSpec(
+        key="axol",
+        label="Almond Bot Axol",
+        default_variant="axol",  # single fixed bimanual configuration; nominal variant
+        control_xacro="axol.sim.urdf.xacro",
+        preset_arg=None,
+        mesh_rewrite=(_AXOL_MESH_RE, _AXOL_MESH_SUB),
+        config_dir="axol",
+        controllers={
+            "axol": {
+                "active": [
+                    "axol_right_arm_controller",
+                    "axol_left_arm_controller",
+                ],
+                "inactive": [],
+            },
+        },
+        # Only mock needs a standalone controller_manager; mujoco/gazebo/isaac host their
+        # own. real is NOT here — Axol's CAN backend is deferred (no ros2_control plugin
+        # yet), so sim.launch serves the sim backends only.
+        standalone_cm_backends=frozenset({"mock"}),
+        foxglove_params=_DEFAULT_FOXGLOVE_PARAMS,
+        # Axol MoveIt config is authored in-repo (Humble, bimanual 2x7-DOF).
+        moveit_pkg="fm_bringup",
+        moveit_cfg=os.path.join("config", "axol"),
+        servo_config="servo.yaml",
+        bringup_srdf={"axol": "axol.srdf"},
+        moveit_srdf="axol.srdf",
+        # Second servo_node for the left arm: its own servo.yaml + delta topics under
+        # /servo_node_left/ (the primary servo_node drives the right arm).
+        extra_servo_configs=(("servo_node_left", "servo_left.yaml"),),
+        # Both arm controllers together claim all 14 revolute joints (the whole model),
+        # so no extra joint_state_publisher is needed (unlike the G1-D's arm subset).
+        full_state_jsp=False,
     ),
 }
 
