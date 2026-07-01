@@ -32,7 +32,7 @@ from launch_ros.actions import Node
 
 from fm_bringup import registry
 
-_VALID_INPUTS = ("foxglove", "joy", "spacenav", "vision")
+_VALID_INPUTS = ("foxglove", "joy", "spacenav", "vision", "mirror")
 
 
 def _launch_setup(context, *args, **kwargs):
@@ -50,13 +50,17 @@ def _launch_setup(context, *args, **kwargs):
             f"Unknown input '{teleop_input}'. One of: {', '.join(_VALID_INPUTS)}."
         )
 
+    # mirror drives an ABSOLUTE EE pose target (1:1 hand mirroring), so it runs the
+    # PoseTracking node — which embeds its own Servo — INSTEAD of servo_node. Every other
+    # input jogs via servo_node. Exactly one of the two owns the arm's JTC at a time.
+    servo_launch = "pose_tracking.launch.py" if teleop_input == "mirror" else "servo.launch.py"
     nodes = [
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                 os.path.join(
                     get_package_share_directory("fm_bringup"),
                     "launch",
-                    "servo.launch.py",
+                    servo_launch,
                 )
             ),
             launch_arguments={
@@ -114,6 +118,66 @@ def _launch_setup(context, *args, **kwargs):
                 parameters=[vision_params],
             ),
         ]
+    elif teleop_input == "mirror":
+        # 1:1 hand mirroring: hand_tracker (MediaPipe Hands) + mirror_source (absolute pose
+        # target -> the PoseTracking node included above, not servo_node). Params load from
+        # the robot's vision.yaml (the persisted home for tuned values); launch args are
+        # appended AFTER so an explicitly-set one wins, while an empty one keeps the yaml.
+        spec = registry.get(robot)
+        vision_yaml = spec.vision_params_file()
+        base_params = [vision_yaml] if os.path.exists(vision_yaml) else []
+
+        tracker_overrides = {"camera_source": camera_source}
+        rotate_deg = LaunchConfiguration("rotate_deg").perform(context)
+        if rotate_deg:
+            tracker_overrides["rotate_deg"] = int(rotate_deg)
+        debug_image = LaunchConfiguration("publish_debug_image").perform(context)
+        if debug_image:
+            tracker_overrides["publish_debug_image"] = debug_image.lower() in ("true", "1", "yes")
+        tracking_mode = LaunchConfiguration("tracking_mode").perform(context)
+        if tracking_mode:
+            tracker_overrides["tracking_mode"] = tracking_mode
+        # hand_tracker resolves its model (hand vs pose) from the package share dir by
+        # tracking_mode, so model_path is NOT forced here (unlike the vision wrist path).
+
+        # mirror_source: stamp the target in the robot's Servo command frame (read from the
+        # same servo.yaml Servo loads, so they never drift), plus the metric-scale knob.
+        source_overrides = {}
+        servo_yaml = spec.servo_params_file()
+        try:
+            with open(servo_yaml) as servo_file:
+                servo_cfg = yaml.safe_load(servo_file)
+            source_overrides["command_frame"] = servo_cfg["moveit_servo"][
+                "robot_link_command_frame"
+            ]
+        except (OSError, KeyError, TypeError) as exc:
+            raise RuntimeError(
+                f"Could not read robot_link_command_frame from {servo_yaml} for robot "
+                f"'{robot}': {exc}. The mirror target must be stamped in that frame."
+            ) from exc
+        hand_span = LaunchConfiguration("hand_span_m").perform(context)
+        if hand_span:
+            source_overrides["hand_span_m"] = float(hand_span)
+        elif tracking_mode == "full_body":
+            # full_body sizes depth by the FOREARM (elbow->wrist), not the hand span.
+            source_overrides["hand_span_m"] = 0.26
+
+        nodes += [
+            Node(
+                package="fm_teleop_vision",
+                executable="hand_tracker",
+                name="hand_tracker",
+                output="screen",
+                parameters=base_params + [tracker_overrides],
+            ),
+            Node(
+                package="fm_teleop_vision",
+                executable="mirror_source",
+                name="mirror_source",
+                output="screen",
+                parameters=base_params + [source_overrides],
+            ),
+        ]
     # foxglove: the browser panel is the publisher; no ROS-side input node.
 
     # Robot-specific teleop adapters (e.g. the G1-D hand teleop, which maps the panel's
@@ -147,7 +211,8 @@ def generate_launch_description():
             DeclareLaunchArgument(
                 "input",
                 default_value="foxglove",
-                description="foxglove | joy | spacenav | vision.",
+                description="foxglove | joy | spacenav | vision (wrist jog) | mirror "
+                "(1:1 hand mirroring via PoseTracking).",
             ),
             DeclareLaunchArgument(
                 "camera_source",
@@ -180,6 +245,31 @@ def generate_launch_description():
                 default_value="30.0",
                 description="vision input only: capture + command rate. Lower (e.g. 15) "
                 "to cut CPU load when the sim is heavy.",
+            ),
+            DeclareLaunchArgument(
+                "rotate_deg",
+                default_value="",
+                description="mirror input only: CLOCKWISE de-rotation (0|90|180|270) for a "
+                "sideways phone stream. Empty keeps the vision.yaml / node default.",
+            ),
+            DeclareLaunchArgument(
+                "publish_debug_image",
+                default_value="",
+                description="mirror input only: publish the vision/image skeleton overlay "
+                "(true|false) to validate tracking. Empty keeps the vision.yaml default.",
+            ),
+            DeclareLaunchArgument(
+                "tracking_mode",
+                default_value="",
+                description="mirror input only: hand (Hand Landmarker + grip) or full_body "
+                "(Pose Landmarker; body wrist drives the arm). Empty keeps the default (hand).",
+            ),
+            DeclareLaunchArgument(
+                "hand_span_m",
+                default_value="",
+                description="mirror input only: operator's reference segment in metres for "
+                "the metric scale (wrist->knuckle ~0.09 hand, forearm ~0.26 full_body). "
+                "Empty keeps the vision.yaml / node default.",
             ),
             OpaqueFunction(function=_launch_setup),
         ]

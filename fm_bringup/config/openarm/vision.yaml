@@ -1,0 +1,39 @@
+# Vision 1:1 mirror teleop (input:=mirror) — hand_tracker + mirror_source parameters.
+#
+# This is the PERSISTED home for values tuned live with `ros2 param set` (which reset on
+# relaunch): tune live, then bake the winners here. Loaded by teleop.launch.py for both
+# nodes; launch args (camera_source / rotate_deg / publish_debug_image) override when set.
+
+hand_tracker:
+  ros__parameters:
+    # Phone IP-webcam streams are often sideways: validate with publish_debug_image:=true,
+    # save a /vision/image frame, and set the CLOCKWISE de-rotation here (0|90|180|270).
+    # Read once at startup — not live-tunable; relaunch after changing.
+    # 90 validated 2026-06-12 against IP Camera Lite (iOS, portrait) — frame upright.
+    rotate_deg: 90
+    publish_debug_image: false
+    # hand (default): 21-landmark Hand Landmarker + grip from finger curl.
+    # full_body: 33-joint Pose Landmarker; the body_side wrist drives the arm (no grip),
+    # forearm = depth reference (launch auto-sets vision_source hand_span_m ~0.26).
+    # Compare live with: teleop.sh ... tracking_mode:=full_body (relaunch to switch).
+    # tracking_mode: hand
+    # body_side: right
+
+mirror_source:
+  ros__parameters:
+    # Metric mirroring: EE metres per metre of real hand travel (the metres-per-image-unit
+    # conversion is derived from the apparent hand size at engage). 1.0 = 1:1.
+    mirror_gain: 1.0
+    # Operator's wrist -> middle-knuckle length; measure the actual hand for best accuracy.
+    hand_span_m: 0.09
+    # Per INPUT axis (image-x, image-y, depth) trim/enable. Depth (mono apparent-size
+    # proxy) is the weakest signal — opt in by raising [2] once planar feels right.
+    axis_gain: [1.0, 1.0, 0.0]
+    # m per image-width unit, used only if the hand size at engage is degenerate.
+    fallback_scale: 0.9
+    # Image axes -> command-frame axes (signs flip live: e.g. ['z','-x','-y']).
+    axis_map_linear: ["z", "x", "-y"]
+    # Command-frame clamp box (m). MUST contain the engage EE pose; caps reach short of
+    # the straight-arm singularity. Saturation now logs a throttled WARN.
+    workspace_min: [-0.10, -0.60, -0.55]
+    workspace_max: [0.55, 0.30, 0.25]
