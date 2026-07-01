@@ -145,11 +145,53 @@ def test_g1_d_moveit_config_in_repo():
 
 def test_full_state_jsp_only_for_subset_controlled_g1():
     # The G1-D drives 7 of 34 joints, so it needs the joint_state_publisher; the
-    # OpenArm + SO101 control their whole model and must not.
+    # OpenArm + SO101 + Axol control their whole model and must not.
     assert registry.get("g1_d").full_state_jsp is True
     assert registry.get("openarm").full_state_jsp is False
     assert registry.get("so101").full_state_jsp is False
+    assert registry.get("axol").full_state_jsp is False
+
+
+def test_get_axol():
+    spec = registry.get("axol")
+    assert spec.key == "axol"
+    assert spec.default_variant == "axol"
+    # Single fixed bimanual configuration: no preset arg.
+    assert spec.preset_arg is None
+    # Arms only — no diff-drive base or hands, so no remaps or teleop adapters.
+    assert spec.cmd_remaps == ()
+    assert spec.teleop_nodes == ()
+
+
+def test_axol_controller_set():
+    spec = registry.get("axol")
+    assert set(spec.controllers) == {"axol"}
+    assert spec.controllers["axol"]["active"] == [
+        "axol_right_arm_controller",
+        "axol_left_arm_controller",
+    ]
+
+
+def test_axol_servo_nodes_one_per_arm():
+    # Right arm on the primary servo_node, left arm on servo_node_left (bimanual).
+    spec = registry.get("axol")
+    names = [name for name, _ in spec.servo_nodes()]
+    assert names == ["servo_node", "servo_node_left"]
+    assert spec.servo_nodes()[1][1].endswith("config/axol/servo_left.yaml")
+
+
+def test_axol_real_is_not_a_cm_backend():
+    # Axol's CAN backend is deferred; only mock uses a standalone controller_manager.
+    spec = registry.get("axol")
+    assert spec.standalone_cm_backends == frozenset({"mock"})
+    assert "real" not in spec.standalone_cm_backends
+
+
+def test_axol_moveit_config_in_repo():
+    spec = registry.get("axol")
+    assert spec.moveit_pkg == "fm_bringup"
+    assert spec.semantic("axol")  # resolves the in-repo SRDF without error
 
 
 def test_registered_robots():
-    assert {"openarm", "so101", "g1_d"} <= set(registry._ROBOTS)
+    assert {"openarm", "so101", "g1_d", "axol"} <= set(registry._ROBOTS)

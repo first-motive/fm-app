@@ -40,6 +40,13 @@ repositories:
     type: git
     url: https://github.com/TheRobotStudio/SO-ARM100.git
     version: fda892cba81032c46c40976a48c9ceadbf40a9ca
+  # Axol (Almond Bot) description: flat URDF + STL, file-vendored into fm_description's
+  # share. CI auto-COLCON_IGNOREs it (not a built ament package). fm_description's
+  # test_descriptions vendors + builds the axol case, so this must be imported here.
+  external/axol:
+    type: git
+    url: https://github.com/almond-bot/axol.git
+    version: ca5de52e5938c6bb174782dd5d504f8d6ec07662
   external/openarm_mujoco:
     type: git
     url: https://github.com/enactic/openarm_mujoco.git

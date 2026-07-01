@@ -55,7 +55,7 @@ robot-specific so the launch files stay thin.
 flowchart TD
     run["./run.sh<br/>container up · colcon build"]
     run --> tui["fm_tui launcher<br/>subprocess: ros2 launch"]
-    reg[("fm_bringup.registry<br/>openarm · so101 · g1_d")]
+    reg[("fm_bringup.registry<br/>openarm · so101 · g1_d · axol")]
 
     tui -->|Robot Description| view["fm_description/<br/>view_robot.launch.py"]
     tui -->|Simulation| sim["fm_bringup/<br/>sim.launch.py"]

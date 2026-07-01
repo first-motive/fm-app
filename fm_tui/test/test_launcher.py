@@ -155,7 +155,7 @@ def test_back_from_robot_returns_to_actions():
             await pilot.pause()
             await pilot.press("enter")  # robot_description -> robot level
             menu = pilot.app.query_one("#menu", ListView)
-            assert len(menu) == 3  # g1_d, so101, openarm
+            assert len(menu) == 4  # g1_d, so101, openarm, axol
             await pilot.press("escape")  # back to actions
             await pilot.pause()
             assert len(menu) == len(actions())

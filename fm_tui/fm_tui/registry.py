@@ -120,6 +120,12 @@ _ROBOTS = (
         ),
         default_variant="right_arm",
     ),
+    Robot(
+        key="axol",
+        label="Almond Bot Axol",
+        variants=("bimanual",),
+        default_variant="bimanual",
+    ),
 )
 
 
@@ -145,6 +151,12 @@ _SIM_ROBOTS = (
         label="Enactic OpenArm",
         variants=("right_arm", "default_bimanual"),
         default_variant="right_arm",
+    ),
+    Robot(
+        key="axol",
+        label="Almond Bot Axol",
+        variants=("axol",),
+        default_variant="axol",
     ),
 )
 _SIM_BACKENDS = ("mujoco", "mock", "gazebo", "isaac")

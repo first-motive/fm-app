@@ -24,6 +24,10 @@ setup(
             "share/" + package_name + "/config/g1_d",
             glob("config/g1_d/*.yaml") + glob("config/g1_d/*.srdf"),
         ),
+        (
+            "share/" + package_name + "/config/axol",
+            glob("config/axol/*.yaml") + glob("config/axol/*.srdf"),
+        ),
     ],
     install_requires=["setuptools"],
     zip_safe=True,

@@ -14,7 +14,7 @@ def test_robot_description_is_wired_with_robots():
     assert rd.wired
     assert rd.launch is not None
     assert rd.robots
-    assert {r.key for r in rd.robots} == {"g1_d", "so101", "openarm"}
+    assert {r.key for r in rd.robots} == {"g1_d", "so101", "openarm", "axol"}
 
 
 def test_autonomous_is_a_stub():
@@ -29,7 +29,7 @@ def test_simulation_and_teleop_are_wired_with_backends():
         entry = action(key)
         assert entry.wired
         assert entry.has_backends
-        assert {r.key for r in entry.robots} == {"openarm", "so101", "g1_d"}
+        assert {r.key for r in entry.robots} == {"openarm", "so101", "g1_d", "axol"}
         assert "mujoco" in entry.backends
 
 

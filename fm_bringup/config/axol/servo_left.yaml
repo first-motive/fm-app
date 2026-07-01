@@ -1,0 +1,54 @@
+# MoveIt Servo for the Axol left_arm group — full 6-DOF Cartesian + joint jogging.
+#
+# Left-arm counterpart of servo.yaml (which drives the right arm). A second servo_node
+# (named servo_node_left) loads this so the two arms jog independently; its delta
+# command topics live under /servo_node_left/. See servo.yaml for the shared rationale
+# (unitless inputs, collision OFF, singularity band).
+#
+# The left arm is 7-DOF, so it spans SE(3): arbitrary 6-DOF Cartesian twists are
+# reachable.
+moveit_servo:
+  use_gazebo: false
+  command_in_type: unitless  # [-1, 1] for joystick-style inputs
+
+  scale:
+    linear: 0.4       # m/s at unit command
+    rotational: 0.8   # rad/s at unit command
+    joint: 0.5        # rad/s at unit command
+
+  low_latency_mode: false
+  publish_period: 0.034  # ~30 Hz command stream
+
+  # Stream a JointTrajectory to the left arm's joint_trajectory_controller.
+  command_out_type: trajectory_msgs/JointTrajectory
+  publish_joint_positions: true
+  publish_joint_velocities: false
+  publish_joint_accelerations: false
+
+  move_group_name: left_arm
+  planning_frame: base
+  ee_frame_name: left_gripper
+  robot_link_command_frame: base
+
+  incoming_command_timeout: 0.1
+  joint_topic: /joint_states
+  status_topic: ~/status
+  cartesian_command_in_topic: ~/delta_twist_cmds
+  joint_command_in_topic: ~/delta_joint_cmds
+  command_out_topic: /axol_left_arm_controller/joint_trajectory
+
+  # Collision checking is OFF (see servo.yaml): each servo_node controls only its arm,
+  # so arm-arm proximity would flood Servo with warnings no single-arm motion can clear.
+  # Singularity slowdown still applies.
+  check_collisions: false
+  collision_check_rate: 10.0
+  self_collision_proximity_threshold: 0.01
+  scene_collision_proximity_threshold: 0.02
+  collision_distance_safety_factor: 1000.0
+  min_allowable_collision_distance: 0.01
+
+  lower_singularity_threshold: 30.0
+  hard_stop_singularity_threshold: 60.0
+  leaving_singularity_threshold_multiplier: 2.0
+
+  joint_limit_margin: 0.1
