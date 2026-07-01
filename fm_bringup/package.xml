@@ -8,17 +8,19 @@
   <license>Apache-2.0</license>
 
   <depend>rclpy</depend>
+  <depend>visualization_msgs</depend>
 
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
   <!-- registry.py processes the backend-selectable xacro into robot_description. -->
   <exec_depend>xacro</exec_depend>
-  <!-- registry.py looks up each robot's MJCF here to inject the mujoco_model param. -->
-  <exec_depend>fm_sim_models</exec_depend>
   <!-- Fills unactuated joints for subset-controlled robots (the G1-D arm). -->
   <exec_depend>joint_state_publisher</exec_depend>
   <exec_depend>foxglove_bridge</exec_depend>
   <exec_depend>fm_control</exec_depend>
+  <exec_depend>fm_orchestration</exec_depend>
+  <exec_depend>fm_sim_backends</exec_depend>
+  <exec_depend>fm_sim_models</exec_depend>
 
   <!-- ros2_control runtime: controller_manager + the controllers the bringup spawns. -->
   <exec_depend>controller_manager</exec_depend>
@@ -28,9 +30,7 @@
   <!-- G1-D wheeled base. -->
   <exec_depend>diff_drive_controller</exec_depend>
 
-  <!-- Sim backends that host their own controller_manager. The per-engine launch
-       files live in fm_sim_backends; sim.launch.py includes them by name. -->
-  <exec_depend>fm_sim_backends</exec_depend>
+  <!-- Sim backends that host their own controller_manager. -->
   <exec_depend>mujoco_ros2_control</exec_depend>
   <exec_depend>gz_ros2_control</exec_depend>
   <exec_depend>ros_gz_sim</exec_depend>

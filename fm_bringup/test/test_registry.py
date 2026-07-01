@@ -153,3 +153,43 @@ def test_full_state_jsp_only_for_subset_controlled_g1():
 
 def test_registered_robots():
     assert {"openarm", "so101", "g1_d"} <= set(registry._ROBOTS)
+
+
+def test_so101_task_env_default_uses_builtin_model():
+    assert registry.resolve_task_env_mujoco_model("so101", "default") is None
+    assert registry.resolve_task_env_mujoco_model("so101", "") is None
+
+
+def test_so101_task_env_aliases_materialize_runtime_models(tmp_path):
+    template_dir = tmp_path / "assets" / "mujoco" / "so101"
+    template_dir.mkdir(parents=True)
+    for name in ("table_reach", "pick_place", "bin_sort"):
+        (template_dir / f"{name}.xml").write_text(
+            '<mujoco model="x"><include file="scene.xml" /></mujoco>',
+            encoding="utf-8",
+        )
+
+    model_path = registry.resolve_task_env_mujoco_model(
+        "so101", "table_reach", workspace_root=str(tmp_path)
+    )
+    assert model_path.endswith("/external/so_arm/Simulation/SO101/fm_task_env_table_reach.xml")
+    assert "scene.xml" in (tmp_path / "external" / "so_arm" / "Simulation" / "SO101" / "fm_task_env_table_reach.xml").read_text(encoding="utf-8")
+
+    assert registry.resolve_task_env_mujoco_model(
+        "so101", "pick_place", workspace_root=str(tmp_path)
+    ).endswith("/external/so_arm/Simulation/SO101/fm_task_env_pick_place.xml")
+    assert registry.resolve_task_env_mujoco_model(
+        "so101", "bin_sort", workspace_root=str(tmp_path)
+    ).endswith("/external/so_arm/Simulation/SO101/fm_task_env_bin_sort.xml")
+
+
+def test_task_env_rejects_unknown_alias():
+    with pytest.raises(RuntimeError) as exc:
+        registry.resolve_task_env_mujoco_model("so101", "nope")
+    assert "table_reach" in str(exc.value)
+
+
+def test_task_env_rejects_non_so101_robot():
+    with pytest.raises(RuntimeError) as exc:
+        registry.resolve_task_env_mujoco_model("openarm", "table_reach")
+    assert "only supported for so101" in str(exc.value)
