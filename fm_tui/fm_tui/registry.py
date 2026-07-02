@@ -36,9 +36,19 @@ class LaunchSpec:
     variant_arg: str = "variant"
     # Sim/teleop actions also pick a backend; set this to pass it as a launch arg.
     backend_arg: str | None = None
+    # Set on launches whose graph honours the viewer choice (robot_description).
+    # When true, command() maps the persisted viewer to use_foxglove/use_rviz.
+    # sim/teleop carry no rviz node, so they leave this false and ignore viewer.
+    viewer_aware: bool = False
 
-    def command(self, robot: str, variant: str, backend: str | None = None) -> list[str]:
-        """Build the ``ros2 launch`` argv for ``robot``, ``variant`` (+ ``backend``)."""
+    def command(
+        self,
+        robot: str,
+        variant: str,
+        backend: str | None = None,
+        viewer: str | None = None,
+    ) -> list[str]:
+        """Build the ``ros2 launch`` argv for ``robot``, ``variant`` (+ ``backend``, ``viewer``)."""
         argv = [
             "ros2",
             "launch",
@@ -49,6 +59,12 @@ class LaunchSpec:
         ]
         if self.backend_arg and backend:
             argv.append(f"{self.backend_arg}:={backend}")
+        if self.viewer_aware and viewer:
+            # Pass both flags explicitly so the argv is unambiguous regardless of
+            # the launch file's own defaults. foxglove is the standing default.
+            use_rviz = viewer == "rviz"
+            argv.append(f"use_foxglove:={'false' if use_rviz else 'true'}")
+            argv.append(f"use_rviz:={'true' if use_rviz else 'false'}")
         return argv
 
 
@@ -93,7 +109,11 @@ class Action:
 
 
 # Robot + variant lists mirror fm_description/launch/view_robot.launch.py.
-_VIEW_ROBOT = LaunchSpec(package="fm_description", launch_file="view_robot.launch.py")
+_VIEW_ROBOT = LaunchSpec(
+    package="fm_description",
+    launch_file="view_robot.launch.py",
+    viewer_aware=True,
+)
 
 _ROBOTS = (
     Robot(
