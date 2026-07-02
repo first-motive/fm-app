@@ -62,6 +62,29 @@ def test_launch_command_appends_backend_when_set():
     )
 
 
+def test_viewer_aware_command_appends_viewer_flags():
+    spec = action("robot_description").launch
+    assert spec.viewer_aware
+    assert spec.command("g1_d", "g1_d", viewer="rviz")[-2:] == [
+        "use_foxglove:=false",
+        "use_rviz:=true",
+    ]
+    assert spec.command("g1_d", "g1_d", viewer="foxglove")[-2:] == [
+        "use_foxglove:=true",
+        "use_rviz:=false",
+    ]
+    # No viewer passed -> no viewer flags (the launch file's own defaults win).
+    assert "use_rviz:=false" not in spec.command("g1_d", "g1_d")
+
+
+def test_non_viewer_aware_command_ignores_viewer():
+    spec = action("simulation").launch
+    assert not spec.viewer_aware
+    cmd = spec.command("g1_d", "g1_d", "mujoco", viewer="rviz")
+    assert not any(arg.startswith("use_rviz") for arg in cmd)
+    assert not any(arg.startswith("use_foxglove") for arg in cmd)
+
+
 def test_robot_rejects_default_outside_variants():
     try:
         Robot(key="x", label="X", variants=("a",), default_variant="b")
