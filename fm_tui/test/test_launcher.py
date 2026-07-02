@@ -11,6 +11,7 @@ from textual.widgets import ListView
 from textual.color import Color
 
 from fm_tools.tui import Header, palette
+from fm_tui import config
 from fm_tui.launcher import FmLauncherApp
 from fm_tui.registry import actions
 
@@ -28,7 +29,11 @@ def test_menu_builds_from_registry():
     asyncio.run(go())
 
 
-def test_wired_path_dispatches_launch():
+def test_wired_path_dispatches_launch(monkeypatch, tmp_path):
+    # Isolate the config so the default (foxglove) drives the dispatch regardless
+    # of any .fm_tui.json in the working tree.
+    monkeypatch.setenv("FM_TUI_CONFIG", str(tmp_path / "cfg.json"))
+
     async def go():
         async with FmLauncherApp().run_test() as pilot:
             await pilot.pause()
@@ -44,12 +49,19 @@ def test_wired_path_dispatches_launch():
             "view_robot.launch.py",
             "robot:=g1_d",
             "variant:=g1_d",
+            # Viewer default (foxglove) rides along as explicit launch flags.
+            "use_foxglove:=true",
+            "use_rviz:=false",
         ]
 
     asyncio.run(go())
 
 
-def test_backend_path_dispatches_with_sim_backend():
+def test_backend_path_dispatches_with_sim_backend(monkeypatch, tmp_path):
+    # Isolate the config like the other dispatch tests; sim is viewer-unaware so
+    # the argv stays free of viewer flags regardless of the persisted default.
+    monkeypatch.setenv("FM_TUI_CONFIG", str(tmp_path / "cfg.json"))
+
     async def go():
         async with FmLauncherApp().run_test() as pilot:
             await pilot.pause()
@@ -145,6 +157,83 @@ def test_header_breadcrumb_tracks_navigation():
             await pilot.press("enter")  # robot_description -> robot level
             await pilot.pause()
             assert header._title == actions()[0].label
+
+    asyncio.run(go())
+
+
+def test_toggle_flips_persists_and_relabels(monkeypatch, tmp_path):
+    monkeypatch.setenv("FM_TUI_CONFIG", str(tmp_path / "cfg.json"))
+
+    async def go():
+        app = FmLauncherApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            assert app._viewer == "foxglove"
+            # The footer V key carries the current viewer.
+            assert app._bindings.keys["v"].description == "VIEWER: foxglove"
+            await pilot.press("v")
+            await pilot.pause()
+            assert app._viewer == "rviz"
+            # The footer label follows the flip.
+            assert app._bindings.keys["v"].description == "VIEWER: rviz"
+        # The flip is persisted, so a fresh launcher would open on rviz.
+        assert config.get_viewer() == "rviz"
+
+    asyncio.run(go())
+
+
+def test_dispatch_carries_rviz_when_default(monkeypatch, tmp_path):
+    monkeypatch.setenv("FM_TUI_CONFIG", str(tmp_path / "cfg.json"))
+    config.set_viewer("rviz")
+
+    async def go():
+        async with FmLauncherApp().run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("enter")  # robot_description
+            await pilot.press("enter")  # g1_d
+            await pilot.press("enter")  # variant -> dispatch
+            await pilot.pause()
+        assert pilot.app.return_value[-2:] == ["use_foxglove:=false", "use_rviz:=true"]
+
+    asyncio.run(go())
+
+
+def test_macos_toggle_to_rviz_warns(monkeypatch, tmp_path):
+    monkeypatch.setenv("FM_TUI_CONFIG", str(tmp_path / "cfg.json"))
+    monkeypatch.setenv("FM_HOST_OS", "macos")
+
+    async def go():
+        app = FmLauncherApp()
+        warnings = []
+        async with app.run_test() as pilot:
+            monkeypatch.setattr(
+                app, "notify", lambda message, **kw: warnings.append((message, kw))
+            )
+            await pilot.press("v")  # foxglove -> rviz on macOS
+            await pilot.pause()
+        assert app._viewer == "rviz"  # still flips and persists
+        assert warnings, "expected a macOS rviz warning"
+        assert warnings[0][1].get("severity") == "warning"
+
+    asyncio.run(go())
+
+
+def test_macos_toggle_back_to_foxglove_is_silent(monkeypatch, tmp_path):
+    monkeypatch.setenv("FM_TUI_CONFIG", str(tmp_path / "cfg.json"))
+    monkeypatch.setenv("FM_HOST_OS", "macos")
+    config.set_viewer("rviz")
+
+    async def go():
+        app = FmLauncherApp()
+        warnings = []
+        async with app.run_test() as pilot:
+            monkeypatch.setattr(
+                app, "notify", lambda message, **kw: warnings.append((message, kw))
+            )
+            await pilot.press("v")  # rviz -> foxglove: no warning
+            await pilot.pause()
+        assert app._viewer == "foxglove"
+        assert not warnings
 
     asyncio.run(go())
 
