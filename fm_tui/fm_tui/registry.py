@@ -118,7 +118,7 @@ _VIEW_ROBOT = LaunchSpec(
 _ROBOTS = (
     Robot(
         key="g1_d",
-        label="Unitree G1 (G1-D)",
+        label="Unitree",
         variants=("g1_d", "g1_29dof_rev_1_0"),
         default_variant="g1_d",
     ),
@@ -156,7 +156,7 @@ _ROBOTS = (
 _SIM_ROBOTS = (
     Robot(
         key="g1_d",
-        label="Unitree G1 (G1-D)",
+        label="Unitree",
         variants=("g1_d",),
         default_variant="g1_d",
     ),

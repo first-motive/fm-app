@@ -265,7 +265,7 @@ _ROBOTS = {
     ),
     "g1_d": RobotSpec(
         key="g1_d",
-        label="Unitree G1-D",
+        label="Unitree",
         default_variant="g1_d",
         control_xacro="g1.sim.urdf.xacro",
         preset_arg=None,  # single fixed configuration; the variant is nominal
