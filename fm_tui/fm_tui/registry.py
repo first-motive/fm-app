@@ -132,13 +132,13 @@ _ROBOTS = (
         key="openarm",
         label="Enactic OpenArm",
         variants=(
-            "right_arm",
-            "left_arm",
             "default_bimanual",
             "right_arm_with_pinch_gripper",
             "left_arm_with_pinch_gripper",
+            "right_arm",
+            "left_arm",
         ),
-        default_variant="right_arm",
+        default_variant="default_bimanual",
     ),
     Robot(
         key="axol",
