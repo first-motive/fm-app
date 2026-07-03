@@ -73,6 +73,9 @@ def test_viewer_aware_command_appends_viewer_flags():
         "use_foxglove:=true",
         "use_rviz:=false",
     ]
+    # Joint control is derived from use_rviz in the launch, so no jsp flag rides
+    # in the argv (keeps parity with FM Desktop's identical command builder).
+    assert not any("use_jsp_gui" in a for a in spec.command("g1_d", "g1_d", viewer="rviz"))
     # No viewer passed -> no viewer flags (the launch file's own defaults win).
     assert "use_rviz:=false" not in spec.command("g1_d", "g1_d")
 
