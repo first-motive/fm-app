@@ -5,7 +5,7 @@ Guidance for Claude Code and Codex working in the `fm-app` repo. See the
 
 ## Purpose
 
-First Motive application layer: the bringup launch orchestration and the operator TUI. Part of First Motive's ROS2 (Humble) stack — one of the public package repos assembled by [`fm-ros2`](https://github.com/first-motive/fm-ros2).
+First Motive application layer: the bringup launch orchestration and the operator TUI. Part of First Motive's ROS2 stack — one of the public package repos assembled by [`fm-ros2`](https://github.com/first-motive/fm-ros2).
 
 ## Conventions
 

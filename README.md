@@ -12,7 +12,7 @@ layers, so its `.repos` pulls the
 [`fm-sim`](https://github.com/first-motive/fm-sim), and
 [`fm-teleop`](https://github.com/first-motive/fm-teleop) sibling repos.
 
-Part of First Motive's ROS2 (Humble) stack. Assembled with the four public package
+Part of First Motive's ROS2 stack. Assembled with the four public package
 repos by [`fm-ros2`](https://github.com/first-motive/fm-ros2).
 
 ## Packages

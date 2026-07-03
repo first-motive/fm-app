@@ -1,6 +1,6 @@
 # Architecture
 
-The application layer of First Motive's ROS2 (Humble) stack: the user-facing
+The application layer of First Motive's ROS2 stack: the user-facing
 entry points that start and drive the whole stack. `fm_tui` is the launcher an
 operator drives; `fm_bringup` is the composition root that resolves everything
 robot-specific and includes the lower layers.
