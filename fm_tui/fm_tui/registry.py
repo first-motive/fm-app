@@ -65,6 +65,10 @@ class LaunchSpec:
             use_rviz = viewer == "rviz"
             argv.append(f"use_foxglove:={'false' if use_rviz else 'true'}")
             argv.append(f"use_rviz:={'true' if use_rviz else 'false'}")
+            # Joint control follows the viewer inside view_robot.launch.py
+            # (use_jsp_gui defaults to auto -> jsp_gui on rviz, headless jsp on
+            # foxglove), so no jsp flag is passed here. That keeps this argv
+            # identical to FM Desktop's, which the parity test asserts.
         return argv
 
 

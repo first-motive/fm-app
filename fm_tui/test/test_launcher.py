@@ -193,6 +193,8 @@ def test_dispatch_carries_rviz_when_default(monkeypatch, tmp_path):
             await pilot.press("enter")  # g1_d
             await pilot.press("enter")  # variant -> dispatch
             await pilot.pause()
+        # rviz rides in as its viewer flags; the launch derives jsp_gui from
+        # use_rviz, so no jsp flag is passed here.
         assert pilot.app.return_value[-2:] == ["use_foxglove:=false", "use_rviz:=true"]
 
     asyncio.run(go())
