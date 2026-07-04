@@ -289,7 +289,13 @@ def main() -> None:
         # The Textual UI has torn down; hand the terminal to the launch. The
         # container entrypoint already sourced ROS + the overlay, so the env is
         # ready and ros2 is on PATH.
-        subprocess.run(command, check=False)
+        try:
+            subprocess.run(command, check=False)
+        except KeyboardInterrupt:
+            # Ctrl+C reaches the whole foreground process group: the launch
+            # handles its own SIGINT and shuts down, so the launcher just exits
+            # quietly instead of dumping a traceback over the teardown.
+            pass
 
 
 if __name__ == "__main__":
