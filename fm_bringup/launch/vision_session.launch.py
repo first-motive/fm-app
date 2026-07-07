@@ -1,0 +1,241 @@
+"""One-shot vision-mirror teleop session — the whole stack from a single launch.
+
+This is what the fm_tui "Vision Teleop" action dispatches, so the operator does not juggle
+three terminals (sim -> teleop -> engage) plus a separate recorder. It composes the existing
+launch files rather than folding the sim into teleop.launch.py (whose docstring assumes the
+sim is already up):
+
+    sim.launch.py       robot_state_publisher (/robot_description) + foxglove_bridge
+                        (ws://8765) + the sim backend + controllers
+    teleop.launch.py    input:=mirror -> pose_tracking + hand_tracker + mirror_source,
+                        started after `teleop_delay` so the sim's controllers + /joint_states
+                        exist before pose_tracking_node's ~10 s robot-state wait
+    mirror_datalogger   the /capture/record start/stop recorder (Foxglove REC/STOP buttons)
+    arm_reset           /vision/reset -> disengage + drive the arm home (Foxglove RESET button)
+
+Prerequisites: the host camera relay must already be running (macOS: scripts/mac_camera_bridge.py
+or socat) and `camera_source` must point at it. In Foxglove Studio, connect to ws://localhost:8765
+and import foxglove/mirror_teleop.json (Layouts -> Import from file).
+"""
+
+import os
+
+import yaml
+
+from ament_index_python.packages import get_package_share_directory
+from launch import LaunchDescription
+from launch.actions import (
+    DeclareLaunchArgument,
+    IncludeLaunchDescription,
+    OpaqueFunction,
+    TimerAction,
+)
+from launch.conditions import IfCondition
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import Node
+
+from fm_bringup import registry
+
+# Launch args forwarded verbatim into teleop.launch.py's mirror branch. Empty values keep the
+# robot's vision.yaml / node defaults (teleop.launch.py only overrides when the arg is non-empty).
+_TELEOP_FORWARD = ("camera_source", "rotate_deg", "publish_debug_image", "tracking_mode", "hand_span_m")
+
+
+def _include(name, launch_arguments):
+    return IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(get_package_share_directory("fm_bringup"), "launch", name)
+        ),
+        launch_arguments=launch_arguments.items(),
+    )
+
+
+def _launch_setup(context, *args, **kwargs):
+    robot = LaunchConfiguration("robot").perform(context)
+    variant = LaunchConfiguration("variant").perform(context)
+    sim_backend = LaunchConfiguration("sim_backend").perform(context)
+    use_foxglove = LaunchConfiguration("use_foxglove").perform(context)
+    teleop_delay = float(LaunchConfiguration("teleop_delay").perform(context))
+
+    spec = registry.get(robot)
+
+    # gripper:=on upgrades the base right_arm to the pinch-gripper preset (URDF gripper + the
+    # openarm_right_gripper_controller). An explicit non-right_arm variant (e.g. default_bimanual)
+    # is left as-is since it already carries grippers. The effective variant flows to sim+teleop.
+    want_gripper = (
+        LaunchConfiguration("gripper").perform(context).strip().lower()
+        in ("on", "true", "1", "yes")
+    )
+    if want_gripper and variant in ("", "right_arm"):
+        variant = "right_arm_with_pinch_gripper"
+    resolved_variant = variant or spec.default_variant
+
+    # 1) Sim owns /robot_description, robot_state_publisher, foxglove_bridge and the controllers.
+    sim = _include(
+        "sim.launch.py",
+        {
+            "robot": robot,
+            "variant": variant,
+            "sim_backend": sim_backend,
+            "use_foxglove": use_foxglove,
+        },
+    )
+
+    # 2) Mirror teleop, held back by teleop_delay so the sim's controllers + /joint_states are up
+    # before pose_tracking_node's robot-state wait (it FATAL-exits if no state within ~10 s on a
+    # cold sim). hand_tracker / mirror_source tolerate tf-not-ready, so only pose_tracking is
+    # timing-sensitive. Tune teleop_delay if a cold MuJoCo start is slow.
+    teleop_args = {
+        "robot": robot,
+        "variant": variant,
+        "sim_backend": sim_backend,
+        "input": "mirror",
+    }
+    for name in _TELEOP_FORWARD:
+        teleop_args[name] = LaunchConfiguration(name).perform(context)
+    teleop = TimerAction(period=teleop_delay, actions=[_include("teleop.launch.py", teleop_args)])
+
+    # 3) Recorder — REC/STOP buttons publish /capture/record. Starts immediately; it intersects
+    # its topic list at session start, so topics not-yet-up before teleop_delay are harmless.
+    # The recorder reads the actual EE via tf; point it at the variant's EE frame (the gripper
+    # preset renames the flange) so ee_*/err_* columns are populated, not empty.
+    dl_ee = spec.ee_frames.get(resolved_variant)
+    datalogger = Node(
+        package="fm_teleop_vision",
+        executable="mirror_datalogger",
+        name="mirror_datalogger",
+        output="screen",
+        arguments=(["--ee-frame", dl_ee] if dl_ee else []),
+        condition=IfCondition(LaunchConfiguration("record")),
+    )
+
+    # 4) Reset/home node — RESET button publishes /vision/reset -> arm_reset disengages and
+    # servos the EE to its home pose via /target_pose (Servo owns the controller, so a
+    # joint_trajectory would be drowned by Servo's hold stream — see arm_reset.py). Source
+    # command_frame from servo.yaml (the Servo planning frame mirror_source stamps /target_pose
+    # in) so they never drift; the home EE pose is arm_reset's openarm default (FK of the URDF
+    # spawn joints).
+    reset_params = {}
+    try:
+        with open(spec.servo_params_file()) as servo_file:
+            servo_cfg = yaml.safe_load(servo_file)
+        reset_params["command_frame"] = servo_cfg["moveit_servo"]["robot_link_command_frame"]
+    except (OSError, KeyError, TypeError):
+        pass  # keep arm_reset's own default command frame + home pose
+    arm_reset = Node(
+        package="fm_teleop_vision",
+        executable="arm_reset",
+        name="arm_reset",
+        output="screen",
+        parameters=[reset_params] if reset_params else [],
+    )
+
+    # 5) Capture browser — serves recorded sessions (index/detail) to the web GUI's
+    # recordings viewer over the WS bridge. Always on (independent of record:=), so past
+    # sessions are browsable even when not currently recording.
+    capture_browser = Node(
+        package="fm_teleop_vision",
+        executable="capture_browser",
+        name="capture_browser",
+        output="screen",
+    )
+
+    nodes = [sim, teleop, datalogger, arm_reset, capture_browser]
+
+    # 6) Gripper adapter — maps mirror_source's hand_preset (open|close) onto the gripper
+    # controller when gripper:=on and the robot defines a gripper spec. mirror_source already
+    # publishes the preset from the hand's finger curl; this node moves the pinchers.
+    if want_gripper and spec.gripper:
+        g = spec.gripper
+        nodes.append(
+            Node(
+                package="fm_teleop_device",
+                executable="gripper_teleop",
+                name="gripper_teleop",
+                output="screen",
+                parameters=[{
+                    "preset_topic": g["preset_topic"],
+                    "command_topic": g["command_topic"],
+                    "joints": list(g["joints"]),
+                    "open_positions": list(g["open"]),
+                    "close_positions": list(g["close"]),
+                }],
+            )
+        )
+    return nodes
+
+
+def generate_launch_description():
+    return LaunchDescription(
+        [
+            DeclareLaunchArgument(
+                "robot",
+                default_value="openarm",
+                description="Robot to run (see fm_bringup.registry). Mirror teleop targets openarm.",
+            ),
+            DeclareLaunchArgument(
+                "variant",
+                default_value="",
+                description="Preset; empty uses the registry default (openarm -> right_arm).",
+            ),
+            DeclareLaunchArgument(
+                "sim_backend",
+                default_value="mujoco",
+                description="Sim backend hosting the controller_manager (macOS: mujoco or mock).",
+            ),
+            DeclareLaunchArgument(
+                "use_foxglove",
+                default_value="true",
+                description="Start foxglove_bridge on ws://0.0.0.0:8765 (via sim.launch.py).",
+            ),
+            DeclareLaunchArgument(
+                "camera_source",
+                default_value="http://host.docker.internal:8090/video",
+                description="Camera stream URL. On macOS this is the host relay "
+                "(scripts/mac_camera_bridge.py / socat) that bridges the phone stream.",
+            ),
+            DeclareLaunchArgument(
+                "rotate_deg",
+                default_value="",
+                description="CLOCKWISE de-rotation (0|90|180|270) for a sideways phone stream. "
+                "Empty keeps the vision.yaml default (90 for the validated iOS setup).",
+            ),
+            DeclareLaunchArgument(
+                "publish_debug_image",
+                default_value="true",
+                description="Publish the /vision/image skeleton overlay (the Foxglove Image "
+                "panel needs it). Default true for this dashboard session.",
+            ),
+            DeclareLaunchArgument(
+                "tracking_mode",
+                default_value="",
+                description="hand (default) or full_body. Empty keeps the node default.",
+            ),
+            DeclareLaunchArgument(
+                "hand_span_m",
+                default_value="",
+                description="Operator reference segment (m) for the metric scale. Empty keeps "
+                "the vision.yaml / node default.",
+            ),
+            DeclareLaunchArgument(
+                "record",
+                default_value="true",
+                description="Start mirror_datalogger so the REC/STOP buttons record a session.",
+            ),
+            DeclareLaunchArgument(
+                "teleop_delay",
+                default_value="12.0",
+                description="Seconds to hold the mirror teleop back so the sim comes up first "
+                "(pose_tracking_node FATAL-exits without a robot state within ~10 s).",
+            ),
+            DeclareLaunchArgument(
+                "gripper",
+                default_value="off",
+                description="on|off — run the right arm WITH the pinch gripper. Upgrades to the "
+                "right_arm_with_pinch_gripper preset and launches gripper_teleop so the operator's "
+                "hand open/close drives the pinchers.",
+            ),
+            OpaqueFunction(function=_launch_setup),
+        ]
+    )
