@@ -25,7 +25,11 @@ def test_get_unknown_raises_with_registered_list():
 
 def test_openarm_controller_set():
     spec = registry.get("openarm")
-    assert set(spec.controllers) == {"right_arm", "default_bimanual"}
+    assert set(spec.controllers) == {
+        "right_arm",
+        "right_arm_with_pinch_gripper",
+        "default_bimanual",
+    }
     assert spec.controllers["right_arm"]["active"] == ["openarm_right_arm_controller"]
     assert spec.controllers["right_arm"]["inactive"] == [
         "openarm_right_forward_position_controller"
