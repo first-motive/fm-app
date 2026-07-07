@@ -155,6 +155,12 @@ def _launch_setup(context, *args, **kwargs):
                 f"Could not read robot_link_command_frame from {servo_yaml} for robot "
                 f"'{robot}': {exc}. The mirror target must be stamped in that frame."
             ) from exc
+        # Anchor the mirror at the variant's EE frame (matches servo's ee_frame_name). The
+        # pinch-gripper preset renames the flange link7 -> ee_base_link; without this the
+        # tf(command_frame -> ee_frame) lookup fails and mirror_source never latches / commands.
+        ee_frame = spec.ee_frames.get(variant or spec.default_variant)
+        if ee_frame:
+            source_overrides["ee_frame"] = ee_frame
         hand_span = LaunchConfiguration("hand_span_m").perform(context)
         if hand_span:
             source_overrides["hand_span_m"] = float(hand_span)

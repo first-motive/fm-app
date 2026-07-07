@@ -52,6 +52,16 @@ def _launch_setup(context, *args, **kwargs):
     pose_yaml = _load_yaml(spec.pose_tracking_params_file())
     moveit_servo = dict(servo_yaml["moveit_servo"])
     moveit_servo.update(pose_yaml.get("moveit_servo", {}))
+    # The pinch-gripper preset renames the flange (link7 -> ee_base_link); re-point every servo
+    # frame that pinned the old flange or MoveIt Servo aborts at init ("Link ... not found").
+    # ee_frame_name (servo.yaml) AND robot_link_command_frame (pose_tracking.yaml pins it to the
+    # EE link) both reference it.
+    ee_frame = spec.ee_frames.get(variant)
+    if ee_frame:
+        default_ee = spec.ee_frames.get(spec.default_variant)
+        moveit_servo["ee_frame_name"] = ee_frame
+        if moveit_servo.get("robot_link_command_frame") == default_ee:
+            moveit_servo["robot_link_command_frame"] = ee_frame
 
     return [
         Node(
