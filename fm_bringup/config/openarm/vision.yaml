@@ -23,11 +23,19 @@ mirror_source:
   ros__parameters:
     # Metric mirroring: EE metres per metre of real hand travel (the metres-per-image-unit
     # conversion is derived from the apparent hand size at engage). 1.0 = 1:1.
-    mirror_gain: 1.0
+    # 0.75: caps peak EE reach short of the straight-arm singularity. A 1.0 capture drove the
+    # arm to 0.51-0.74 m reach and Servo's singularity guard halted ~20% of frames (24.5 cm
+    # p95 error vs ~7 cm nominal); 0.75 keeps travel inside the dexterous envelope.
+    mirror_gain: 0.75
     # Operator's wrist -> middle-knuckle length; measure the actual hand for best accuracy.
     hand_span_m: 0.09
     # Per INPUT axis (image-x, image-y, depth) trim/enable. Depth (mono apparent-size
     # proxy) is the weakest signal — opt in by raising [2] once planar feels right.
+    # Depth kept OFF: a 0.6 trial (capture 20260702_130156) doubled EE tracking error
+    # (err_x 0.15cm -> 2.7cm, err_dist 3.3cm -> 8.4cm) because the mono hand-size depth
+    # estimate is contaminated by up/down motion (raising the hand changes apparent size),
+    # so up/down leaked into forward/back — a SENSING flaw, not fixable by gain. Real
+    # forward/back reach needs a proper depth source (e.g. full_body forearm mode).
     axis_gain: [1.0, 1.0, 0.0]
     # m per image-width unit, used only if the hand size at engage is degenerate.
     fallback_scale: 0.9
@@ -35,5 +43,21 @@ mirror_source:
     axis_map_linear: ["z", "x", "-y"]
     # Command-frame clamp box (m). MUST contain the engage EE pose; caps reach short of
     # the straight-arm singularity. Saturation now logs a throttled WARN.
-    workspace_min: [-0.10, -0.60, -0.55]
+    # -Y floor pulled -0.60 -> -0.45: -0.60 sat inside the singular envelope and the target
+    # pinned there ~14.5% of a capture (worst error windows). Engage EE (~-0.26) stays inside.
+    workspace_min: [-0.10, -0.45, -0.55]
     workspace_max: [0.55, 0.30, 0.25]
+    # Per-tick target step cap (m) at publish_rate (50 Hz) -> ~1.0 m/s ceiling: above
+    # intentional teleop speed, below single-frame landmark-jitter spikes (~20 mm/tick).
+    # 0.0 disables. Applied against the last published target in mirror_source.
+    max_step_m: 0.02
+    # Gripper open/close thresholds on the finger-curl signal (0=open..1=closed). Calibrated
+    # to the operator's range (capture 20260707_105139: open hand ~0.46, closed ~0.84); the
+    # default 0.35 open threshold never fired (curl min 0.39). Hysteresis: open when
+    # curl < open_below, close when curl > close_above, hold between. Tune per operator/camera.
+    grip_open_below: 0.55
+    grip_close_above: 0.72
+    # DEBUG-SESSION FLAG: publish the full per-tick mapping internals on /vision/mirror_debug
+    # so the mirror_datalogger dbg_* columns fill (pre-clamp target, per-axis scale, overflow).
+    # Tiny msg/tick; set back to false once the tracking debug is done.
+    publish_debug: true

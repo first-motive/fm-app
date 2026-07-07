@@ -19,6 +19,14 @@ moveit_servo:
   # so the straight-arm singularity protection carries over.
   command_in_type: speed_units
 
+  # After the target stream stops (disengage / tracking loss) Servo publishes this many halt
+  # messages and then goes SILENT, releasing the joint_trajectory_controller. This is required
+  # by the vision RESET/HOME path (fm_teleop_vision/arm_reset): the reset node disengages, waits
+  # a short grace, then publishes a one-shot home JointTrajectory to the SAME controller topic —
+  # so Servo must stop writing or the two publishers fight. A finite count (not the "publish
+  # forever" behaviour of 0) guarantees the topic is free for the home command.
+  num_outgoing_halt_msgs_to_publish: 4
+
   # --- PoseTracking PID gains (read from the moveit_servo namespace) ---
   windup_limit: 0.05
   # P-only Cartesian position loop (command_in_type speed_units, so twist = gain * error in m/s).

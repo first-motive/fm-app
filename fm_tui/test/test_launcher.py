@@ -6,7 +6,7 @@ value (the ``ros2 launch`` argv), never by running it.
 
 import asyncio
 
-from textual.widgets import ListView
+from textual.widgets import Input, ListView
 
 from textual.color import Color
 
@@ -14,7 +14,18 @@ from fm_tools.tui import Header, palette
 from fm_tui import config
 from fm_tui import launcher
 from fm_tui.launcher import FmLauncherApp, main
-from fm_tui.registry import actions
+from fm_tui.registry import action, actions
+
+
+async def _walk_to_vision_form(pilot):
+    """Drive vision (last action) -> openarm -> right_arm -> mujoco -> the params form."""
+    menu = pilot.app.query_one("#menu", ListView)
+    menu.index = [a.key for a in actions()].index("vision")
+    await pilot.press("enter")  # action -> robot (openarm, only one)
+    await pilot.press("enter")  # robot -> variant (right_arm)
+    await pilot.press("enter")  # variant -> backend (mujoco default)
+    await pilot.press("enter")  # backend -> params form
+    await pilot.pause()
 
 
 def test_menu_builds_from_registry():
@@ -67,7 +78,7 @@ def test_backend_path_dispatches_with_sim_backend(monkeypatch, tmp_path):
         async with FmLauncherApp().run_test() as pilot:
             await pilot.pause()
             menu = pilot.app.query_one("#menu", ListView)
-            menu.index = 3  # Simulation (last, wired, has backends)
+            menu.index = [a.key for a in actions()].index("simulation")
             await pilot.press("enter")  # action -> robot (g1_d, first in the sim list)
             await pilot.press("enter")  # robot -> variant (g1_d)
             await pilot.press("enter")  # variant -> backend (mujoco default)
@@ -86,12 +97,72 @@ def test_backend_path_dispatches_with_sim_backend(monkeypatch, tmp_path):
     asyncio.run(go())
 
 
+def test_vision_form_dispatches_with_defaults():
+    async def go():
+        async with FmLauncherApp().run_test() as pilot:
+            await pilot.pause()
+            await _walk_to_vision_form(pilot)
+            # The form mounted an Input per field, prefilled with defaults.
+            assert pilot.app.query_one("#field-camera_source", Input).value == (
+                "http://host.docker.internal:8090/video"
+            )
+            await pilot.press("enter")  # submit the form with defaults -> dispatch + exit
+            await pilot.pause()
+        assert pilot.app.return_value == [
+            "ros2",
+            "launch",
+            "fm_bringup",
+            "vision_session.launch.py",
+            "robot:=openarm",
+            "variant:=right_arm",
+            "sim_backend:=mujoco",
+            "camera_source:=http://host.docker.internal:8090/video",
+            "rotate_deg:=90",
+            "tracking_mode:=hand",
+            "publish_debug_image:=true",
+            "record:=true",
+            "gripper:=off",
+        ]
+
+    asyncio.run(go())
+
+
+def test_vision_form_blocks_empty_required_field():
+    async def go():
+        async with FmLauncherApp().run_test() as pilot:
+            await pilot.pause()
+            await _walk_to_vision_form(pilot)
+            # Clearing the required camera URL must block dispatch.
+            pilot.app.query_one("#field-camera_source", Input).value = ""
+            await pilot.press("enter")
+            await pilot.pause()
+            assert pilot.app.is_running
+            assert pilot.app.return_value is None
+
+    asyncio.run(go())
+
+
+def test_back_from_params_returns_to_backend():
+    async def go():
+        async with FmLauncherApp().run_test() as pilot:
+            await pilot.pause()
+            await _walk_to_vision_form(pilot)
+            await pilot.press("escape")  # leave the form
+            await pilot.pause()
+            menu = pilot.app.query_one("#menu", ListView)
+            # Back on the backend list (mujoco, mock), menu visible again.
+            assert not menu.has_class("hidden")
+            assert len(menu) == len(action("vision").backends)
+
+    asyncio.run(go())
+
+
 def test_stub_does_not_dispatch():
     async def go():
         async with FmLauncherApp().run_test() as pilot:
             await pilot.pause()
             menu = pilot.app.query_one("#menu", ListView)
-            menu.index = 2  # autonomous (stub)
+            menu.index = [a.key for a in actions()].index("autonomous")
             await pilot.press("enter")
             await pilot.pause()
             # No dispatch: app still running on the action level, no exit value.

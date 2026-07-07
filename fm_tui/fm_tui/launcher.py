@@ -37,7 +37,7 @@ import subprocess
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.widgets import Footer, Label, ListItem, ListView
+from textual.widgets import Footer, Input, Label, ListItem, ListView, Select
 
 from fm_tools.tui import BorderedPanel, Header, apply_theme
 from fm_tools.tui.palette import LILAC, PLUM
@@ -46,8 +46,15 @@ from fm_tui import config
 from fm_tui.registry import Action, Robot, actions
 
 # Navigation levels, in walk order. Wired sim/teleop actions add a backend step
-# after the variant; robot_description dispatches straight from the variant.
-_ACTION, _ROBOT, _VARIANT, _BACKEND = "action", "robot", "variant", "backend"
+# after the variant; robot_description dispatches straight from the variant. Fielded
+# actions (vision) add a params form after the backend before dispatching.
+_ACTION, _ROBOT, _VARIANT, _BACKEND, _PARAMS = (
+    "action",
+    "robot",
+    "variant",
+    "backend",
+    "params",
+)
 
 
 class _MenuItem(ListItem):
@@ -98,6 +105,14 @@ class FmLauncherApp(App):
     .stub {{
         color: $text-disabled;
     }}
+    /* Params form: a stacked label + Input per field, mounted in place of the menu. */
+    .field-label {{
+        color: $text-muted;
+        margin: 1 0 0 0;
+    }}
+    #menu.hidden {{
+        display: none;
+    }}
     /* Recolour the selected-row highlight (Textual paints it with the blue
        accent). Textual renamed the class from `--highlight` (<=0.8x) to
        `-highlight` (>=0.86), so cover both spellings, focused and blurred. The
@@ -124,6 +139,10 @@ class FmLauncherApp(App):
         self._action: Action | None = None
         self._robot: Robot | None = None
         self._variant: str | None = None
+        self._backend: str | None = None
+        # Mounted Input widgets (name -> Input) and every form widget, live only on _PARAMS.
+        self._field_inputs: dict[str, Input] = {}
+        self._param_widgets: list = []
         # The standing viewer default, loaded from the persisted config. The `v`
         # binding flips and re-persists it; _dispatch reads it at launch time.
         self._viewer = config.get_viewer()
@@ -202,6 +221,9 @@ class FmLauncherApp(App):
                 self._action.label if self._action else None,
                 self._robot.label if self._robot else None,
                 self._variant,
+                # Backend + a "params" marker only surface once the form is open.
+                self._backend if self._level == _PARAMS else None,
+                "params" if self._level == _PARAMS else None,
             )
             if crumb
         ]
@@ -224,15 +246,23 @@ class FmLauncherApp(App):
             self._level = _VARIANT
             self._rebuild()
         elif self._level == _VARIANT:
-            # Sim/teleop pick a backend next; everything else dispatches now.
+            # Sim/teleop pick a backend next; fielded actions collect a form; the rest dispatch.
             if self._action.has_backends:
                 self._variant = value
                 self._level = _BACKEND
                 self._rebuild()
+            elif self._action.launch.has_fields:
+                self._variant = value
+                self._enter_params()
             else:
                 self._dispatch(value)
-        else:
-            self._dispatch(self._variant, value)
+        else:  # _BACKEND
+            # A fielded action (vision) collects its form after the backend; others dispatch.
+            if self._action.launch.has_fields:
+                self._backend = value
+                self._enter_params()
+            else:
+                self._dispatch(self._variant, value)
 
     def _select_action(self, act: Action) -> None:
         if not act.wired:
@@ -244,7 +274,16 @@ class FmLauncherApp(App):
 
     def action_back(self) -> None:
         """Step back one level; quit from the top."""
-        if self._level == _BACKEND:
+        if self._level == _PARAMS:
+            # Tear the form down and return to the backend step (or variant if backend-less).
+            self._exit_params()
+            if self._action.has_backends:
+                self._level = _BACKEND
+                self._backend = None
+            else:
+                self._level = _VARIANT
+                self._variant = None
+        elif self._level == _BACKEND:
             self._level = _VARIANT
             self._variant = None
         elif self._level == _VARIANT:
@@ -272,13 +311,87 @@ class FmLauncherApp(App):
                 severity="warning",
             )
 
+    # --- params form -------------------------------------------------------
+
+    def _enter_params(self) -> None:
+        """Swap the menu for a stacked label+Input per field (mounted in the menu panel)."""
+        self._level = _PARAMS
+        menu = self.query_one("#menu", ListView)
+        menu.add_class("hidden")
+        self._field_inputs = {}
+        widgets: list = []
+        for field_spec in self._action.launch.fields:
+            label = field_spec.label + (" *" if field_spec.required else "")
+            widgets.append(Label(label, classes="field-label"))
+            if field_spec.choices:
+                # A dropdown for one-of fields — pick, don't type.
+                widget = Select(
+                    [(c, c) for c in field_spec.choices],
+                    value=field_spec.default,
+                    allow_blank=False,
+                    id=f"field-{field_spec.name}",
+                )
+            else:
+                widget = Input(value=field_spec.default, id=f"field-{field_spec.name}")
+            self._field_inputs[field_spec.name] = widget
+            widgets.append(widget)
+        self._param_widgets = widgets
+        # Mount into the bordered panel that holds the menu, after the (now hidden) ListView.
+        menu.parent.mount(*widgets)
+        self._set_prompt()
+        self.call_after_refresh(self._focus_first_field)
+
+    def _focus_first_field(self) -> None:
+        """Focus the first field so the form is immediately typeable."""
+        for field_spec in self._action.launch.fields:
+            self._field_inputs[field_spec.name].focus()
+            return
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        """Enter in any field submits the whole form (defaults are prefilled)."""
+        if self._level == _PARAMS:
+            self._try_launch()
+
+    def _try_launch(self) -> None:
+        """Validate the fields and dispatch, or notify and stay on the form."""
+        params: dict[str, str] = {}
+        for field_spec in self._action.launch.fields:
+            # Input.value is typed text; Select.value is the chosen option — both -> str.
+            value = str(self._field_inputs[field_spec.name].value).strip()
+            if field_spec.required and not value:
+                self.notify(f"{field_spec.label} is required.", severity="warning")
+                self._field_inputs[field_spec.name].focus()
+                return
+            if field_spec.choices and value not in field_spec.choices:
+                self.notify(
+                    f"{field_spec.label} must be one of: {', '.join(field_spec.choices)}.",
+                    severity="warning",
+                )
+                self._field_inputs[field_spec.name].focus()
+                return
+            params[field_spec.name] = value
+        self._dispatch(self._variant, self._backend, params)
+
+    def _exit_params(self) -> None:
+        """Remove the mounted form widgets and restore the menu list."""
+        for widget in self._param_widgets:
+            widget.remove()
+        self._param_widgets = []
+        self._field_inputs = {}
+        self.query_one("#menu", ListView).remove_class("hidden")
+
     # --- dispatch ----------------------------------------------------------
 
-    def _dispatch(self, variant: str, backend: str | None = None) -> None:
+    def _dispatch(
+        self,
+        variant: str,
+        backend: str | None = None,
+        params: dict[str, str] | None = None,
+    ) -> None:
         """Exit with the launch argv; :func:`main` runs it post-teardown."""
         self.exit(
             self._action.launch.command(
-                self._robot.key, variant, backend, viewer=self._viewer
+                self._robot.key, variant, backend, params, viewer=self._viewer
             )
         )
 
