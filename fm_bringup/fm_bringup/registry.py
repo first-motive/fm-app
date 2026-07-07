@@ -21,7 +21,7 @@ robot-specific data themselves.
 
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 import xacro
@@ -115,6 +115,26 @@ class RobotSpec:
     # True adds a joint_state_publisher that fills those joints at their default while
     # taking the controlled joints from the broadcaster via source_list.
     full_state_jsp: bool = False
+
+    # Per-variant "home"/ready joint positions, matching the URDF spawn pose in the control
+    # xacro (fm_control). Consumed by the vision RESET/HOME path: vision_session.launch.py
+    # passes home_positions[variant] to fm_teleop_vision/arm_reset, which drives the arm here
+    # on reset. Kept as data (not re-parsed from the xacro) but must stay in sync with it.
+    # variant -> [pos per controlled arm joint, in controllers.yaml joint order]. Empty for
+    # robots without a defined home.
+    home_positions: dict = field(default_factory=dict)
+
+    # Optional pinch-gripper adapter spec. When the vision session runs with gripper:=on,
+    # vision_session.launch.py launches fm_teleop_device/gripper_teleop with these params to
+    # map mirror_source's hand_preset (open|close) onto the gripper controller. None for robots
+    # with no gripper in the vision path. Keys: preset_topic, command_topic, joints, open, close.
+    gripper: Optional[dict] = None
+
+    # Per-variant end-effector (servo tip / mirror anchor) frame. The pinch-gripper preset
+    # REPLACES the bare flange link7 with the gripper's ee_base_link, so servo's ee_frame_name
+    # and mirror_source's ee_frame must follow the variant or the arm can't be servoed / latched.
+    # Empty -> keep servo.yaml / node defaults. variant -> frame id.
+    ee_frames: dict = field(default_factory=dict)
 
     # --- path helpers --------------------------------------------------------
 
@@ -212,6 +232,13 @@ _ROBOTS = {
                 "active": ["openarm_right_arm_controller"],
                 "inactive": ["openarm_right_forward_position_controller"],
             },
+            "right_arm_with_pinch_gripper": {
+                "active": [
+                    "openarm_right_arm_controller",
+                    "openarm_right_gripper_controller",
+                ],
+                "inactive": [],
+            },
             "default_bimanual": {
                 "active": [
                     "openarm_left_arm_controller",
@@ -227,8 +254,35 @@ _ROBOTS = {
         moveit_pkg="openarm_bimanual_moveit_config",
         moveit_cfg=os.path.join("config", "openarm_v2.0"),
         servo_config="servo.yaml",
-        bringup_srdf={"right_arm": "right_arm.srdf"},
+        # The gripper variant reuses the single-arm SRDF — the servo planning group (the 7 arm
+        # joints) is unchanged; the extra finger joints live outside it.
+        bringup_srdf={
+            "right_arm": "right_arm.srdf",
+            "right_arm_with_pinch_gripper": "right_arm.srdf",
+        },
         moveit_srdf="openarm_bimanual.srdf",
+        # Bent "ready" spawn pose from openarm.ros2_control.xacro (joint2/4/6 = 0.5/1.2/0.3,
+        # rest 0) — off the straight-arm singularity. arm_reset drives here on RESET.
+        home_positions={
+            "right_arm": [0.0, 0.5, 0.0, 1.2, 0.0, 0.3, 0.0],
+            "right_arm_with_pinch_gripper": [0.0, 0.5, 0.0, 1.2, 0.0, 0.3, 0.0],
+        },
+        # Pinch gripper: hand open/close -> finger_joint1 position. Right finger range is
+        # [-0.7854, 0]; live testing showed the physical open/close is inverted from the joint
+        # sign, so open = -0.7854 (fingers apart), close = 0.0 (fingers together). joint2 mimics.
+        gripper={
+            "preset_topic": "/gripper_teleop/right/preset",
+            "command_topic": "/openarm_right_gripper_controller/joint_trajectory",
+            "joints": ["openarm_right_finger_joint1"],
+            "open": [-0.7854],
+            "close": [0.0],
+        },
+        # link7 is the bare flange; the pinch-gripper preset replaces it with ee_base_link
+        # (measured at the identical home pose, so arm_reset's home EE is unchanged).
+        ee_frames={
+            "right_arm": "openarm_right_link7",
+            "right_arm_with_pinch_gripper": "openarm_right_ee_base_link",
+        },
     ),
     "so101": RobotSpec(
         key="so101",
