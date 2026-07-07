@@ -12,7 +12,8 @@ from textual.color import Color
 
 from fm_tools.tui import Header, palette
 from fm_tui import config
-from fm_tui.launcher import FmLauncherApp
+from fm_tui import launcher
+from fm_tui.launcher import FmLauncherApp, main
 from fm_tui.registry import actions
 
 
@@ -252,3 +253,16 @@ def test_back_from_robot_returns_to_actions():
             assert len(menu) == len(actions())
 
     asyncio.run(go())
+
+
+def test_main_absorbs_launch_ctrl_c(monkeypatch):
+    # Ctrl+C during the launch hits the whole process group and surfaces in the
+    # launcher as KeyboardInterrupt from subprocess.run. main() must swallow it
+    # so teardown stays quiet instead of dumping a traceback.
+    monkeypatch.setattr(launcher.FmLauncherApp, "run", lambda self: ["ros2", "launch"])
+
+    def raise_ctrl_c(*args, **kwargs):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(launcher.subprocess, "run", raise_ctrl_c)
+    main()  # must return, not raise
