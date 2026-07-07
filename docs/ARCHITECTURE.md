@@ -1,6 +1,6 @@
 # Architecture
 
-The application layer of First Motive's ROS2 (Humble) stack: the user-facing
+The application layer of First Motive's ROS2 stack: the user-facing
 entry points that start and drive the whole stack. `fm_tui` is the launcher an
 operator drives; `fm_bringup` is the composition root that resolves everything
 robot-specific and includes the lower layers.
@@ -55,7 +55,7 @@ robot-specific so the launch files stay thin.
 flowchart TD
     run["./run.sh<br/>container up · colcon build"]
     run --> tui["fm_tui launcher<br/>subprocess: ros2 launch"]
-    reg[("fm_bringup.registry<br/>openarm · so101 · g1_d")]
+    reg[("fm_bringup.registry<br/>openarm · so101 · g1_d · axol")]
 
     tui -->|Robot Description| view["fm_description/<br/>view_robot.launch.py"]
     tui -->|Simulation| sim["fm_bringup/<br/>sim.launch.py"]

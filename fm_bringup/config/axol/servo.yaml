@@ -1,0 +1,60 @@
+# MoveIt Servo for the Axol right_arm group — full 6-DOF Cartesian + joint jogging.
+#
+# Servo subscribes /joint_states from the sim, turns incoming TwistStamped / JointJog
+# commands into a streamed JointTrajectory, and publishes it to the arm's JTC. Teleop
+# inputs (Foxglove panel, joy, spacenav) publish onto the delta command topics below.
+#
+# The right arm is 7-DOF, so it spans SE(3): arbitrary 6-DOF Cartesian twists are
+# reachable (no reduced-DOF caveat). One servo_node per arm; the left arm runs an
+# independent servo_node_left (see servo_left.yaml).
+moveit_servo:
+  use_gazebo: false
+  command_in_type: unitless  # [-1, 1] for joystick-style inputs
+
+  scale:
+    linear: 0.4       # m/s at unit command
+    rotational: 0.8   # rad/s at unit command
+    joint: 0.5        # rad/s at unit command
+
+  low_latency_mode: false
+  publish_period: 0.034  # ~30 Hz command stream
+
+  # Stream a JointTrajectory to the right arm's joint_trajectory_controller.
+  command_out_type: trajectory_msgs/JointTrajectory
+  publish_joint_positions: true
+  publish_joint_velocities: false
+  publish_joint_accelerations: false
+
+  move_group_name: right_arm
+  planning_frame: base
+  ee_frame_name: right_gripper
+  robot_link_command_frame: base
+
+  incoming_command_timeout: 0.1
+  joint_topic: /joint_states
+  status_topic: ~/status
+  cartesian_command_in_topic: ~/delta_twist_cmds
+  joint_command_in_topic: ~/delta_joint_cmds
+  command_out_topic: /axol_right_arm_controller/joint_trajectory
+
+  # Collision checking is OFF. Servo monitors the whole 14-joint model, but each
+  # servo_node controls only its own arm; the other arm sits static at its pose and
+  # arm-arm proximity would flood Servo with warnings no single-arm motion can clear.
+  # A full SRDF collision matrix is out of scope; the arms jog in free space, so
+  # operator caution is required. Singularity slowdown below still applies.
+  check_collisions: false
+  collision_check_rate: 10.0
+  self_collision_proximity_threshold: 0.01
+  scene_collision_proximity_threshold: 0.02
+  collision_distance_safety_factor: 1000.0
+  min_allowable_collision_distance: 0.01
+
+  # Raised from the MoveIt Servo defaults (17 / 30) to widen the usable band before the
+  # singularity guard halts: Cartesian teleop near the edge of reach otherwise hits a
+  # constant emergency stop. The trade-off is faster, less-damped motion close to a true
+  # singularity — acceptable in sim; revisit for real hardware.
+  lower_singularity_threshold: 30.0
+  hard_stop_singularity_threshold: 60.0
+  leaving_singularity_threshold_multiplier: 2.0
+
+  joint_limit_margin: 0.1

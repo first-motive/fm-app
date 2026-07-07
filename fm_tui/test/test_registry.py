@@ -14,7 +14,7 @@ def test_robot_description_is_wired_with_robots():
     assert rd.wired
     assert rd.launch is not None
     assert rd.robots
-    assert {r.key for r in rd.robots} == {"g1_d", "so101", "openarm"}
+    assert {r.key for r in rd.robots} == {"g1_d", "so101", "openarm", "axol"}
 
 
 def test_autonomous_is_a_stub():
@@ -29,7 +29,7 @@ def test_simulation_and_teleop_are_wired_with_backends():
         entry = action(key)
         assert entry.wired
         assert entry.has_backends
-        assert {r.key for r in entry.robots} == {"openarm", "so101", "g1_d"}
+        assert {r.key for r in entry.robots} == {"openarm", "so101", "g1_d", "axol"}
         assert "mujoco" in entry.backends
 
 
@@ -131,6 +131,32 @@ def test_fieldless_command_appends_no_extra_args():
     # A spec without fields (simulation) must not gain trailing name:=value tokens.
     cmd = action("simulation").launch.command("openarm", "right_arm", "mujoco")
     assert cmd[-1] == "sim_backend:=mujoco"
+
+
+def test_viewer_aware_command_appends_viewer_flags():
+    spec = action("robot_description").launch
+    assert spec.viewer_aware
+    assert spec.command("g1_d", "g1_d", viewer="rviz")[-2:] == [
+        "use_foxglove:=false",
+        "use_rviz:=true",
+    ]
+    assert spec.command("g1_d", "g1_d", viewer="foxglove")[-2:] == [
+        "use_foxglove:=true",
+        "use_rviz:=false",
+    ]
+    # Joint control is derived from use_rviz in the launch, so no jsp flag rides
+    # in the argv (keeps parity with FM Desktop's identical command builder).
+    assert not any("use_jsp_gui" in a for a in spec.command("g1_d", "g1_d", viewer="rviz"))
+    # No viewer passed -> no viewer flags (the launch file's own defaults win).
+    assert "use_rviz:=false" not in spec.command("g1_d", "g1_d")
+
+
+def test_non_viewer_aware_command_ignores_viewer():
+    spec = action("simulation").launch
+    assert not spec.viewer_aware
+    cmd = spec.command("g1_d", "g1_d", "mujoco", viewer="rviz")
+    assert not any(arg.startswith("use_rviz") for arg in cmd)
+    assert not any(arg.startswith("use_foxglove") for arg in cmd)
 
 
 def test_robot_rejects_default_outside_variants():

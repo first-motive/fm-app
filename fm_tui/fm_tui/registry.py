@@ -54,6 +54,10 @@ class LaunchSpec:
     backend_arg: str | None = None
     # Extra params collected via a form step and appended as name:=value (in this order).
     fields: tuple[Field, ...] = ()
+    # Set on launches whose graph honours the viewer choice (robot_description).
+    # When true, command() maps the persisted viewer to use_foxglove/use_rviz.
+    # sim/teleop carry no rviz node, so they leave this false and ignore viewer.
+    viewer_aware: bool = False
 
     @property
     def has_fields(self) -> bool:
@@ -66,8 +70,9 @@ class LaunchSpec:
         variant: str,
         backend: str | None = None,
         params: dict[str, str] | None = None,
+        viewer: str | None = None,
     ) -> list[str]:
-        """Build the ``ros2 launch`` argv for ``robot``, ``variant`` (+ ``backend`` + fields)."""
+        """Build the ``ros2 launch`` argv for ``robot``, ``variant`` (+ ``backend``, fields, ``viewer``)."""
         argv = [
             "ros2",
             "launch",
@@ -82,6 +87,16 @@ class LaunchSpec:
         params = params or {}
         for field_spec in self.fields:
             argv.append(f"{field_spec.name}:={params.get(field_spec.name, field_spec.default)}")
+        if self.viewer_aware and viewer:
+            # Pass both flags explicitly so the argv is unambiguous regardless of
+            # the launch file's own defaults. foxglove is the standing default.
+            use_rviz = viewer == "rviz"
+            argv.append(f"use_foxglove:={'false' if use_rviz else 'true'}")
+            argv.append(f"use_rviz:={'true' if use_rviz else 'false'}")
+            # Joint control follows the viewer inside view_robot.launch.py
+            # (use_jsp_gui defaults to auto -> jsp_gui on rviz, headless jsp on
+            # foxglove), so no jsp flag is passed here. That keeps this argv
+            # identical to FM Desktop's, which the parity test asserts.
         return argv
 
 
@@ -126,12 +141,16 @@ class Action:
 
 
 # Robot + variant lists mirror fm_description/launch/view_robot.launch.py.
-_VIEW_ROBOT = LaunchSpec(package="fm_description", launch_file="view_robot.launch.py")
+_VIEW_ROBOT = LaunchSpec(
+    package="fm_description",
+    launch_file="view_robot.launch.py",
+    viewer_aware=True,
+)
 
 _ROBOTS = (
     Robot(
         key="g1_d",
-        label="Unitree G1 (G1-D)",
+        label="Unitree",
         variants=("g1_d", "g1_29dof_rev_1_0"),
         default_variant="g1_d",
     ),
@@ -145,13 +164,19 @@ _ROBOTS = (
         key="openarm",
         label="Enactic OpenArm",
         variants=(
-            "right_arm",
-            "left_arm",
             "default_bimanual",
             "right_arm_with_pinch_gripper",
             "left_arm_with_pinch_gripper",
+            "right_arm",
+            "left_arm",
         ),
-        default_variant="right_arm",
+        default_variant="default_bimanual",
+    ),
+    Robot(
+        key="axol",
+        label="Almond Bot Axol",
+        variants=("bimanual",),
+        default_variant="bimanual",
     ),
 )
 
@@ -163,7 +188,7 @@ _ROBOTS = (
 _SIM_ROBOTS = (
     Robot(
         key="g1_d",
-        label="Unitree G1 (G1-D)",
+        label="Unitree",
         variants=("g1_d",),
         default_variant="g1_d",
     ),
@@ -178,6 +203,12 @@ _SIM_ROBOTS = (
         label="Enactic OpenArm",
         variants=("right_arm", "default_bimanual"),
         default_variant="right_arm",
+    ),
+    Robot(
+        key="axol",
+        label="Almond Bot Axol",
+        variants=("axol",),
+        default_variant="axol",
     ),
 )
 _SIM_BACKENDS = ("mujoco", "mock", "gazebo", "isaac")

@@ -1,7 +1,7 @@
 # fm_bringup
 
 Launch files and runtime configs for the First Motive graph: the original stub
-bringup, plus the OpenArm, SO101, and G1-D simulation and teleop stacks.
+bringup, plus the OpenArm, SO101, G1-D, and Axol simulation and teleop stacks.
 `ament_python`.
 
 ## Robot Registry
@@ -14,7 +14,7 @@ foxglove_bridge params, and the MoveIt Servo context (SRDF / kinematics / servo.
 `registry.get(robot)` and hold no robot-specific data. Adding a robot is one entry
 here, mirroring `fm_description`'s `view_robot.launch.py`.
 
-Registered: `openarm`, `so101`, `g1_d`.
+Registered: `openarm`, `so101`, `g1_d`, `axol`.
 
 ## Launches
 
@@ -36,11 +36,13 @@ starts `robot_state_publisher` + `foxglove_bridge`, brings up the controller_man
 for the chosen backend, then spawns the controllers. The robot's
 `standalone_cm_backends` decides which backends need a standalone `ros2_control_node`
 (mock/real for OpenArm + SO101; mock only for the G1-D, whose real arm is a bridge,
-not a controller_manager); mujoco/gazebo host the controller_manager inside the sim;
+not a controller_manager, and the Axol, whose real CAN backend is deferred — no
+ros2_control plugin yet); mujoco/gazebo host the controller_manager inside the sim;
 isaac bridges to an externally-running Isaac Sim over ROS topics.
 
 ```bash
 ros2 launch fm_bringup sim.launch.py robot:=so101 sim_backend:=mujoco
+ros2 launch fm_bringup sim.launch.py robot:=axol sim_backend:=mujoco
 ros2 launch fm_bringup teleop.launch.py robot:=g1_d input:=foxglove sim_backend:=mock
 ```
 
@@ -59,10 +61,12 @@ config/<robot>/
 ```
 
 `config/openarm` reuses the vendored OpenArm MoveIt config for kinematics + limits;
-`config/so101` and `config/g1_d` carry an in-repo MoveIt config authored for Humble.
-Per-robot Servo reach: OpenArm + G1-D are 7-DOF (full 6-DOF Cartesian); SO101 is 5-DOF
-(JointJog primary, Cartesian translation-only — orientation drifts on the unreachable
-axis). The controller set is identical across sim backends; only the `<ros2_control>`
+`config/so101`, `config/g1_d`, and `config/axol` carry an in-repo MoveIt config
+authored for Humble. The bimanual G1-D and Axol add a second `servo_left.yaml` and
+run one `servo_node` per arm (the primary drives the right arm, `servo_node_left` the
+left). Per-robot Servo reach: OpenArm, G1-D, and Axol are 7-DOF (full 6-DOF
+Cartesian); SO101 is 5-DOF (JointJog primary, Cartesian translation-only — orientation
+drifts on the unreachable axis). The controller set is identical across sim backends; only the `<ros2_control>`
 System plugin in the description swaps. Joint names match each description's geometry.
 
 ## Teleop Input

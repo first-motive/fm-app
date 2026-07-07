@@ -1,0 +1,54 @@
+# Axol controllers: joint_state_broadcaster + a 7-joint JTC per arm.
+#
+# Sim backends only (mock/mujoco/gazebo/isaac) — the real CAN backend is deferred.
+# For mujoco/gazebo/isaac the sim process hosts the controller_manager and reads
+# these params; for mock a standalone ros2_control_node does. Each arm controller
+# claims the 7 joints of its own axol_{left,right}_system in the description. Joint
+# names match the vendored axol.urdf exactly ({left,right}_{s1,s2,s3,e1,e2,w1,w2}_0).
+controller_manager:
+  ros__parameters:
+    update_rate: 100  # Hz
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    # Primary MoveIt Servo targets: each streams trajectory_msgs/JointTrajectory.
+    axol_right_arm_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+    axol_left_arm_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+axol_right_arm_controller:
+  ros__parameters:
+    joints:
+      - right_s1_0
+      - right_s2_0
+      - right_s3_0
+      - right_e1_0
+      - right_e2_0
+      - right_w1_0
+      - right_w2_0
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+      - velocity
+    allow_nonzero_velocity_at_trajectory_end: true
+
+axol_left_arm_controller:
+  ros__parameters:
+    joints:
+      - left_s1_0
+      - left_s2_0
+      - left_s3_0
+      - left_e1_0
+      - left_e2_0
+      - left_w1_0
+      - left_w2_0
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+      - velocity
+    allow_nonzero_velocity_at_trajectory_end: true

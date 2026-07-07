@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+SRDF for the Almond Bot Axol arms (7-DOF each, left + right).
+
+MoveIt Servo needs an SRDF whose joints/links match the loaded model exactly, or the
+planning scene monitor waits forever ("complete state not known"). Each arm is a
+7-joint chain from the shared base to its gripper tip: joints {left,right}_{s1,s2,
+s3,e1,e2,w1,w2}_0. The grippers are fixed in the URDF (no DOF), so the tip link is
+rigid. Robot name axol matches the fm_control description so MoveIt accepts the pair.
+
+Each arm is 7-DOF, so it spans SE(3): Servo drives full 6-DOF Cartesian twists (no
+reduced-DOF caveat, unlike the SO101). One servo_node per arm group (see servo.yaml /
+servo_left.yaml); arm-arm collision is not guarded, so operator caution is required.
+-->
+<robot name="axol">
+    <group name="right_arm">
+        <chain base_link="base" tip_link="right_gripper"/>
+    </group>
+
+    <group name="left_arm">
+        <chain base_link="base" tip_link="left_gripper"/>
+    </group>
+
+    <group_state name="home" group="right_arm">
+        <joint name="right_s1_0" value="0"/>
+        <joint name="right_s2_0" value="0"/>
+        <joint name="right_s3_0" value="0"/>
+        <joint name="right_e1_0" value="0"/>
+        <joint name="right_e2_0" value="0"/>
+        <joint name="right_w1_0" value="0"/>
+        <joint name="right_w2_0" value="0"/>
+    </group_state>
+
+    <group_state name="home" group="left_arm">
+        <joint name="left_s1_0" value="0"/>
+        <joint name="left_s2_0" value="0"/>
+        <joint name="left_s3_0" value="0"/>
+        <joint name="left_e1_0" value="0"/>
+        <joint name="left_e2_0" value="0"/>
+        <joint name="left_w1_0" value="0"/>
+        <joint name="left_w2_0" value="0"/>
+    </group_state>
+
+    <!-- Adjacent link pairs along each chain (URDF parent/child), plus the shared
+         spine (root->base->s1). Servo runs with check_collisions off, so these keep
+         the planning scene from flagging permanent self-contact. -->
+    <disable_collisions link1="root" link2="base" reason="Adjacent"/>
+    <disable_collisions link1="base" link2="s1" reason="Adjacent"/>
+
+    <disable_collisions link1="s1" link2="right_s2" reason="Adjacent"/>
+    <disable_collisions link1="right_s2" link2="right_s3" reason="Adjacent"/>
+    <disable_collisions link1="right_s3" link2="right_e1" reason="Adjacent"/>
+    <disable_collisions link1="right_e1" link2="right_e2" reason="Adjacent"/>
+    <disable_collisions link1="right_e2" link2="right_w0" reason="Adjacent"/>
+    <disable_collisions link1="right_w0" link2="right_w1" reason="Adjacent"/>
+    <disable_collisions link1="right_w1" link2="right_w2" reason="Adjacent"/>
+    <disable_collisions link1="right_w2" link2="right_gripper" reason="Adjacent"/>
+
+    <disable_collisions link1="s1" link2="left_s2" reason="Adjacent"/>
+    <disable_collisions link1="left_s2" link2="left_s3" reason="Adjacent"/>
+    <disable_collisions link1="left_s3" link2="left_e1" reason="Adjacent"/>
+    <disable_collisions link1="left_e1" link2="left_e2" reason="Adjacent"/>
+    <disable_collisions link1="left_e2" link2="left_w0" reason="Adjacent"/>
+    <disable_collisions link1="left_w0" link2="left_w1" reason="Adjacent"/>
+    <disable_collisions link1="left_w1" link2="left_w2" reason="Adjacent"/>
+    <disable_collisions link1="left_w2" link2="left_gripper" reason="Adjacent"/>
+</robot>

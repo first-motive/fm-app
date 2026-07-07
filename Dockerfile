@@ -26,6 +26,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # bridge/sim pair, MoveIt + servo for teleop, and the headless GL stack (xvfb +
 # mesa) the simulators render against. All on the Humble apt mirror (gz libs via
 # the OSRF repo above) for both arm64 and amd64, so no source builds.
+#
+# x11vnc + websockify + novnc extend that headless X into the macOS rviz path:
+# rviz has no native Mac build and cannot render over XQuartz's indirect GLX on
+# Apple Silicon, so it renders against Xvfb with software GL (llvmpipe) and this
+# VNC bridge exports the framebuffer to the host browser (see scripts/rviz-vnc.sh).
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ros-humble-mujoco-ros2-control \
       ros-humble-gz-ros2-control \
@@ -36,6 +41,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       xvfb \
       libgl1-mesa-dri \
       libglu1-mesa \
+      x11vnc \
+      websockify \
+      novnc \
     && rm -rf /var/lib/apt/lists/*
 
 # Python deps colcon does not resolve: the MuJoCo physics engine the sim core
