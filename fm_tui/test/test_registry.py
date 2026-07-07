@@ -62,6 +62,77 @@ def test_launch_command_appends_backend_when_set():
     )
 
 
+def test_vision_is_wired_with_fields_and_openarm_only():
+    entry = action("vision")
+    assert entry.wired
+    assert entry.has_backends
+    assert entry.launch.has_fields
+    assert {r.key for r in entry.robots} == {"openarm"}
+    assert entry.robots[0].variants == ("right_arm",)
+    assert set(entry.backends) >= {"mujoco", "mock"}
+    # Every field name must be a launch arg vision_session.launch.py declares.
+    names = [f.name for f in entry.launch.fields]
+    assert names == [
+        "camera_source",
+        "rotate_deg",
+        "tracking_mode",
+        "publish_debug_image",
+        "record",
+        "gripper",
+    ]
+
+
+def test_vision_command_appends_fields_after_backend():
+    spec = action("vision").launch
+    cmd = spec.command(
+        "openarm",
+        "right_arm",
+        "mujoco",
+        params={
+            "camera_source": "http://host.docker.internal:8090/video",
+            "rotate_deg": "90",
+            "tracking_mode": "hand",
+            "publish_debug_image": "true",
+            "record": "true",
+        },
+    )
+    assert cmd == [
+        "ros2",
+        "launch",
+        "fm_bringup",
+        "vision_session.launch.py",
+        "robot:=openarm",
+        "variant:=right_arm",
+        "sim_backend:=mujoco",
+        "camera_source:=http://host.docker.internal:8090/video",
+        "rotate_deg:=90",
+        "tracking_mode:=hand",
+        "publish_debug_image:=true",
+        "record:=true",
+        "gripper:=off",
+    ]
+
+
+def test_vision_command_uses_field_defaults_when_params_absent():
+    spec = action("vision").launch
+    cmd = spec.command("openarm", "right_arm", "mujoco")
+    # Fields fall back to their declared defaults, appended in declaration order.
+    assert cmd[-6:] == [
+        "camera_source:=http://host.docker.internal:8090/video",
+        "rotate_deg:=90",
+        "tracking_mode:=hand",
+        "publish_debug_image:=true",
+        "record:=true",
+        "gripper:=off",
+    ]
+
+
+def test_fieldless_command_appends_no_extra_args():
+    # A spec without fields (simulation) must not gain trailing name:=value tokens.
+    cmd = action("simulation").launch.command("openarm", "right_arm", "mujoco")
+    assert cmd[-1] == "sim_backend:=mujoco"
+
+
 def test_robot_rejects_default_outside_variants():
     try:
         Robot(key="x", label="X", variants=("a",), default_variant="b")

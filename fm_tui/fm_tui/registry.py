@@ -27,8 +27,24 @@ from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
+class Field:
+    """A free-text launch parameter collected from the operator before dispatch.
+
+    Fielded actions (e.g. vision teleop, which needs a camera URL) add a form step after
+    the menu walk. Each field becomes a ``name:=value`` launch argument; ``name`` must match
+    a ``DeclareLaunchArgument`` in the target launch file.
+    """
+
+    name: str  # launch arg name
+    label: str  # prompt shown in the form
+    default: str = ""
+    required: bool = False  # non-empty value required to dispatch
+    choices: tuple[str, ...] = ()  # if set, value must be one of these
+
+
+@dataclass(frozen=True)
 class LaunchSpec:
-    """How a wired action turns a robot + variant (+ backend) into a launch call."""
+    """How a wired action turns a robot + variant (+ backend + fields) into a launch call."""
 
     package: str
     launch_file: str
@@ -36,9 +52,22 @@ class LaunchSpec:
     variant_arg: str = "variant"
     # Sim/teleop actions also pick a backend; set this to pass it as a launch arg.
     backend_arg: str | None = None
+    # Extra params collected via a form step and appended as name:=value (in this order).
+    fields: tuple[Field, ...] = ()
 
-    def command(self, robot: str, variant: str, backend: str | None = None) -> list[str]:
-        """Build the ``ros2 launch`` argv for ``robot``, ``variant`` (+ ``backend``)."""
+    @property
+    def has_fields(self) -> bool:
+        """True when the launcher should collect form fields before dispatch."""
+        return bool(self.fields)
+
+    def command(
+        self,
+        robot: str,
+        variant: str,
+        backend: str | None = None,
+        params: dict[str, str] | None = None,
+    ) -> list[str]:
+        """Build the ``ros2 launch`` argv for ``robot``, ``variant`` (+ ``backend`` + fields)."""
         argv = [
             "ros2",
             "launch",
@@ -49,6 +78,10 @@ class LaunchSpec:
         ]
         if self.backend_arg and backend:
             argv.append(f"{self.backend_arg}:={backend}")
+        # Append fields in declaration order (deterministic argv) — collected value or default.
+        params = params or {}
+        for field_spec in self.fields:
+            argv.append(f"{field_spec.name}:={params.get(field_spec.name, field_spec.default)}")
         return argv
 
 
@@ -160,6 +193,41 @@ _TELEOP = LaunchSpec(
     backend_arg="sim_backend",
 )
 
+# Vision 1:1 hand-mirror teleop: one launch stands up sim + mirror teleop + recorder + reset
+# (vision_session.launch.py). It needs a camera stream URL (the macOS host relay by default) and
+# a few tuning knobs, collected in a form step. Field names must match vision_session's launch
+# args. Mirror teleop is openarm/right_arm only today.
+_VISION_FIELDS = (
+    Field(
+        "camera_source",
+        "Camera stream URL",
+        "http://host.docker.internal:8090/video",
+        required=True,
+    ),
+    Field("rotate_deg", "Rotate clockwise (0/90/180/270)", "90"),
+    Field("tracking_mode", "Tracking mode", "hand", choices=("hand", "full_body")),
+    Field("publish_debug_image", "Publish /vision/image", "true", choices=("true", "false")),
+    Field("record", "Auto-start recorder", "true", choices=("true", "false")),
+    # Run the arm with the pinch gripper (hand open/close drives the pinchers) or without it.
+    Field("gripper", "Gripper (pinchers)", "off", choices=("on", "off")),
+)
+_VISION = LaunchSpec(
+    package="fm_bringup",
+    launch_file="vision_session.launch.py",
+    backend_arg="sim_backend",
+    fields=_VISION_FIELDS,
+)
+_VISION_ROBOTS = (
+    Robot(
+        key="openarm",
+        label="Enactic OpenArm",
+        variants=("right_arm",),
+        default_variant="right_arm",
+    ),
+)
+# macOS daily driver is mujoco; mock is the no-sim fallback. gazebo/isaac are Linux/GPU.
+_VISION_BACKENDS = ("mujoco", "mock")
+
 
 ACTIONS: tuple[Action, ...] = (
     Action(
@@ -168,9 +236,19 @@ ACTIONS: tuple[Action, ...] = (
         launch=_VIEW_ROBOT,
         robots=_ROBOTS,
     ),
+    # Vision 1:1 hand-mirror teleop — one-shot full session (sim + mirror + recorder + reset).
+    # Placed high and labelled distinctly so it is not confused with the generic "Teleop" below
+    # (which defaults to the foxglove/browser input, no camera).
+    Action(
+        key="vision",
+        label="Vision Teleop (1:1 mirror)",
+        launch=_VISION,
+        robots=_VISION_ROBOTS,
+        backends=_VISION_BACKENDS,
+    ),
     Action(
         key="teleop",
-        label="Teleop",
+        label="Teleop (device / browser input)",
         launch=_TELEOP,
         robots=_SIM_ROBOTS,
         backends=_SIM_BACKENDS,
