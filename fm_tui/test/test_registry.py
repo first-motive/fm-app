@@ -70,30 +70,35 @@ def test_vision_is_wired_with_fields_and_openarm_only():
     assert {r.key for r in entry.robots} == {"openarm"}
     assert entry.robots[0].variants == ("right_arm",)
     assert set(entry.backends) >= {"mujoco", "mock"}
-    # Every field name must be a launch arg vision_session.launch.py declares.
     names = [f.name for f in entry.launch.fields]
     assert names == [
-        "camera_source",
+        "camera",
+        "phone_ip",
         "rotate_deg",
         "tracking_mode",
         "publish_debug_image",
         "record",
         "gripper",
     ]
+    # The camera picker is host_only: collected + persisted for the host relay
+    # manager, never a launch arg. Every other field must match a vision_session arg.
+    assert {f.name for f in entry.launch.fields if f.host_only} == {"camera", "phone_ip"}
 
 
-def test_vision_command_appends_fields_after_backend():
+def test_vision_command_appends_only_launch_fields_after_backend():
     spec = action("vision").launch
     cmd = spec.command(
         "openarm",
         "right_arm",
         "mujoco",
         params={
-            "camera_source": "http://host.docker.internal:8090/video",
+            "camera": "phone",
+            "phone_ip": "192.168.1.207:8081",
             "rotate_deg": "90",
             "tracking_mode": "hand",
             "publish_debug_image": "true",
             "record": "true",
+            "gripper": "off",
         },
     )
     assert cmd == [
@@ -104,27 +109,30 @@ def test_vision_command_appends_fields_after_backend():
         "robot:=openarm",
         "variant:=right_arm",
         "sim_backend:=mujoco",
-        "camera_source:=http://host.docker.internal:8090/video",
         "rotate_deg:=90",
         "tracking_mode:=hand",
         "publish_debug_image:=true",
         "record:=true",
         "gripper:=off",
     ]
+    # host_only picker fields never reach the launch argv (they drive the host relay).
+    assert not any(a.startswith(("camera:=", "phone_ip:=")) for a in cmd)
+    assert not any("camera_source" in a for a in cmd)
 
 
 def test_vision_command_uses_field_defaults_when_params_absent():
     spec = action("vision").launch
     cmd = spec.command("openarm", "right_arm", "mujoco")
-    # Fields fall back to their declared defaults, appended in declaration order.
-    assert cmd[-6:] == [
-        "camera_source:=http://host.docker.internal:8090/video",
+    # Only the non-host_only fields fall back to defaults, in declaration order.
+    assert cmd[-5:] == [
         "rotate_deg:=90",
         "tracking_mode:=hand",
         "publish_debug_image:=true",
         "record:=true",
         "gripper:=off",
     ]
+    # camera / phone_ip are host_only, so no camera token appears in the argv.
+    assert not any("camera" in a for a in cmd)
 
 
 def test_fieldless_command_appends_no_extra_args():

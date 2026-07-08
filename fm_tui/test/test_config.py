@@ -64,3 +64,42 @@ def test_set_viewer_rejects_unknown(monkeypatch, tmp_path):
     except ValueError:
         return
     raise AssertionError("expected ValueError for unknown viewer")
+
+
+def test_camera_defaults_when_absent(monkeypatch, tmp_path):
+    monkeypatch.setenv("FM_TUI_CONFIG", str(tmp_path / "absent.json"))
+    assert config.get_camera() == {"camera": "phone", "phone_ip": ""}
+
+
+def test_set_camera_round_trips_phone_with_ip(monkeypatch, tmp_path):
+    monkeypatch.setenv("FM_TUI_CONFIG", str(tmp_path / "cfg.json"))
+    config.set_camera("phone", "192.168.1.207:8081")
+    assert config.get_camera() == {"camera": "phone", "phone_ip": "192.168.1.207:8081"}
+
+
+def test_set_camera_mac_clears_nothing_else(monkeypatch, tmp_path):
+    cfg = tmp_path / "cfg.json"
+    monkeypatch.setenv("FM_TUI_CONFIG", str(cfg))
+    config.save({"viewer": "rviz"})
+    config.set_camera("mac")
+    data = config.load()
+    assert data["camera"] == "mac"
+    assert data["phone_ip"] == ""
+    assert data["viewer"] == "rviz"  # camera write preserves the viewer key
+
+
+def test_get_camera_falls_back_on_unknown_value(monkeypatch, tmp_path):
+    cfg = tmp_path / "cfg.json"
+    monkeypatch.setenv("FM_TUI_CONFIG", str(cfg))
+    config.save({"camera": "webcam", "phone_ip": "10.0.0.5"})
+    # Unknown camera value falls back to the default, but the stored IP is kept.
+    assert config.get_camera() == {"camera": "phone", "phone_ip": "10.0.0.5"}
+
+
+def test_set_camera_rejects_unknown(monkeypatch, tmp_path):
+    monkeypatch.setenv("FM_TUI_CONFIG", str(tmp_path / "cfg.json"))
+    try:
+        config.set_camera("hologram")
+    except ValueError:
+        return
+    raise AssertionError("expected ValueError for unknown camera")

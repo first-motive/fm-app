@@ -66,3 +66,31 @@ def set_viewer(viewer: str) -> None:
     data = load()
     data["viewer"] = viewer
     save(data)
+
+
+# The vision camera source. The relay it selects can only run on the host, so the
+# operator's TUI choice rides through this file to the host manager
+# (scripts/run/camera-bridge.sh) rather than the container launch. Kept out of
+# _DEFAULTS so a plain config stays viewer-only; get_camera() supplies its own.
+CAMERAS = ("phone", "mac")
+_CAMERA_DEFAULT = "phone"
+
+
+def get_camera() -> dict:
+    """Return ``{'camera': <phone|mac>, 'phone_ip': <str>}``, defaulted and validated."""
+    data = load()
+    camera = data.get("camera")
+    return {
+        "camera": camera if camera in CAMERAS else _CAMERA_DEFAULT,
+        "phone_ip": str(data.get("phone_ip", "") or ""),
+    }
+
+
+def set_camera(camera: str, phone_ip: str = "") -> None:
+    """Persist the camera choice (+ phone IP) for the host camera manager."""
+    if camera not in CAMERAS:
+        raise ValueError(f"unknown camera {camera!r}; expected one of {CAMERAS}")
+    data = load()
+    data["camera"] = camera
+    data["phone_ip"] = phone_ip
+    save(data)
