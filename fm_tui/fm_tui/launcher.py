@@ -20,10 +20,11 @@ launch inherits the real terminal (the container entrypoint has already sourced
 ROS + the overlay). Stub actions carry no launch spec; selecting one shows a
 notice and never dispatches.
 
-Viewer default: the ``V`` hotkey flips the standing viewer (Foxglove ⇄ rviz),
-shown in the footer beside QUIT/BACK as ``VIEWER: <viewer>`` (its binding label,
-refreshed on toggle). The choice persists through :mod:`fm_tui.config` and rides
-into the ``robot_description`` dispatch as ``use_foxglove`` / ``use_rviz`` flags.
+Viewer default: the ``V`` hotkey cycles the standing viewer (foxglove -> rviz ->
+panel -> …), shown in the footer beside QUIT/BACK as ``VIEWER: <viewer>`` (its
+binding label, refreshed on toggle). The choice persists through
+:mod:`fm_tui.config` and rides into the ``robot_description`` dispatch as
+``use_foxglove`` / ``use_rviz`` flags (panel keeps the bridge up like foxglove).
 
 Widgets come from the theming layer (:mod:`fm_tools.tui`) so the launcher shares
 the monitor's look, themed or bare.
@@ -301,8 +302,10 @@ class FmLauncherApp(App):
         self._rebuild()
 
     def action_toggle_viewer(self) -> None:
-        """Flip the viewer default, refresh the footer label, and persist it."""
-        self._viewer = "rviz" if self._viewer == "foxglove" else "foxglove"
+        """Cycle the viewer default (foxglove -> rviz -> panel -> …), relabel, persist."""
+        order = config.VIEWERS
+        # get_viewer() guarantees _viewer is a member, so index() is safe.
+        self._viewer = order[(order.index(self._viewer) + 1) % len(order)]
         config.set_viewer(self._viewer)
         self._refresh_viewer_binding()
         # rviz has no native macOS build; on a Mac it renders in the container and

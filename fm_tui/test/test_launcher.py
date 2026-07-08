@@ -283,10 +283,17 @@ def test_toggle_flips_persists_and_relabels(monkeypatch, tmp_path):
             await pilot.press("v")
             await pilot.pause()
             assert app._viewer == "rviz"
-            # The footer label follows the flip.
+            # The footer label follows the cycle.
             assert app._bindings.keys["v"].description == "VIEWER: rviz"
-        # The flip is persisted, so a fresh launcher would open on rviz.
-        assert config.get_viewer() == "rviz"
+            # V cycles all three (foxglove -> rviz -> panel -> foxglove).
+            await pilot.press("v")
+            await pilot.pause()
+            assert app._viewer == "panel"
+            await pilot.press("v")
+            await pilot.pause()
+            assert app._viewer == "foxglove"
+        # The last flip is persisted.
+        assert config.get_viewer() == "foxglove"
 
     asyncio.run(go())
 
@@ -329,7 +336,7 @@ def test_macos_toggle_to_rviz_warns(monkeypatch, tmp_path):
     asyncio.run(go())
 
 
-def test_macos_toggle_back_to_foxglove_is_silent(monkeypatch, tmp_path):
+def test_macos_toggle_off_rviz_is_silent(monkeypatch, tmp_path):
     monkeypatch.setenv("FM_TUI_CONFIG", str(tmp_path / "cfg.json"))
     monkeypatch.setenv("FM_HOST_OS", "macos")
     config.set_viewer("rviz")
@@ -341,9 +348,9 @@ def test_macos_toggle_back_to_foxglove_is_silent(monkeypatch, tmp_path):
             monkeypatch.setattr(
                 app, "notify", lambda message, **kw: warnings.append((message, kw))
             )
-            await pilot.press("v")  # rviz -> foxglove: no warning
+            await pilot.press("v")  # rviz -> panel: no warning (only entering rviz warns)
             await pilot.pause()
-        assert app._viewer == "foxglove"
+        assert app._viewer == "panel"
         assert not warnings
 
     asyncio.run(go())
