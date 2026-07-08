@@ -6,7 +6,7 @@ value (the ``ros2 launch`` argv), never by running it.
 
 import asyncio
 
-from textual.widgets import Input, ListView
+from textual.widgets import Button, Input, ListView, Select
 
 from textual.color import Color
 
@@ -97,17 +97,21 @@ def test_backend_path_dispatches_with_sim_backend(monkeypatch, tmp_path):
     asyncio.run(go())
 
 
-def test_vision_form_dispatches_with_defaults():
+def test_vision_form_dispatches_mac_needs_no_ip(monkeypatch, tmp_path):
+    monkeypatch.setenv("FM_TUI_CONFIG", str(tmp_path / "cfg.json"))
+
     async def go():
         async with FmLauncherApp().run_test() as pilot:
             await pilot.pause()
             await _walk_to_vision_form(pilot)
-            # The form mounted an Input per field, prefilled with defaults.
-            assert pilot.app.query_one("#field-camera_source", Input).value == (
-                "http://host.docker.internal:8090/video"
-            )
-            await pilot.press("enter")  # submit the form with defaults -> dispatch + exit
+            # Pick the Mac built-in camera — no IP required.
+            pilot.app.query_one("#field-camera", Select).value = "mac"
             await pilot.pause()
+            # Submit via the Launch button (Enter on a Select opens its dropdown).
+            pilot.app.set_focus(pilot.app.query_one("#form-launch", Button))
+            await pilot.press("enter")  # button press -> dispatch + exit
+            await pilot.pause()
+        # host_only camera fields drive the host relay, so they never reach the argv.
         assert pilot.app.return_value == [
             "ros2",
             "launch",
@@ -116,28 +120,61 @@ def test_vision_form_dispatches_with_defaults():
             "robot:=openarm",
             "variant:=right_arm",
             "sim_backend:=mujoco",
-            "camera_source:=http://host.docker.internal:8090/video",
             "rotate_deg:=90",
             "tracking_mode:=hand",
             "publish_debug_image:=true",
             "record:=true",
             "gripper:=off",
         ]
+        # The choice is persisted for the host camera manager.
+        assert config.get_camera() == {"camera": "mac", "phone_ip": ""}
 
     asyncio.run(go())
 
 
-def test_vision_form_blocks_empty_required_field():
+def test_vision_form_phone_requires_ip_then_persists(monkeypatch, tmp_path):
+    monkeypatch.setenv("FM_TUI_CONFIG", str(tmp_path / "cfg.json"))
+
     async def go():
         async with FmLauncherApp().run_test() as pilot:
             await pilot.pause()
             await _walk_to_vision_form(pilot)
-            # Clearing the required camera URL must block dispatch.
-            pilot.app.query_one("#field-camera_source", Input).value = ""
-            await pilot.press("enter")
+            # Camera defaults to phone with an empty IP -> submitting is blocked.
+            assert pilot.app.query_one("#field-camera", Select).value == "phone"
+            pilot.app.query_one("#field-phone_ip", Input).focus()
+            await pilot.pause()
+            await pilot.press("enter")  # Enter in the (empty) IP field -> blocked
             await pilot.pause()
             assert pilot.app.is_running
             assert pilot.app.return_value is None
+            # Provide the IP -> dispatches.
+            pilot.app.query_one("#field-phone_ip", Input).value = "192.168.1.207:8081"
+            await pilot.press("enter")
+            await pilot.pause()
+        assert pilot.app.return_value is not None
+        assert not any("camera" in a for a in pilot.app.return_value)
+        # Persisted for the host relay manager, IP included for next-run prefill.
+        assert config.get_camera() == {
+            "camera": "phone",
+            "phone_ip": "192.168.1.207:8081",
+        }
+
+    asyncio.run(go())
+
+
+def test_vision_form_prefills_persisted_camera(monkeypatch, tmp_path):
+    monkeypatch.setenv("FM_TUI_CONFIG", str(tmp_path / "cfg.json"))
+    config.set_camera("phone", "10.0.0.9:8081")
+
+    async def go():
+        async with FmLauncherApp().run_test() as pilot:
+            await pilot.pause()
+            await _walk_to_vision_form(pilot)
+            # The form opens on the last-used camera + IP, not the static defaults.
+            assert pilot.app.query_one("#field-camera", Select).value == "phone"
+            assert (
+                pilot.app.query_one("#field-phone_ip", Input).value == "10.0.0.9:8081"
+            )
 
     asyncio.run(go())
 

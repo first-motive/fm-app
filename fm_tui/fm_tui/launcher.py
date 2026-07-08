@@ -37,7 +37,7 @@ import subprocess
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.widgets import Footer, Input, Label, ListItem, ListView, Select
+from textual.widgets import Button, Footer, Input, Label, ListItem, ListView, Select
 
 from fm_tools.tui import BorderedPanel, Header, apply_theme
 from fm_tools.tui.palette import LILAC, PLUM
@@ -146,6 +146,9 @@ class FmLauncherApp(App):
         # The standing viewer default, loaded from the persisted config. The `v`
         # binding flips and re-persists it; _dispatch reads it at launch time.
         self._viewer = config.get_viewer()
+        # Last camera choice (+ phone IP), used to prefill the vision form so the
+        # phone IP carries across runs. _try_launch re-persists it on dispatch.
+        self._camera_cfg = config.get_camera()
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -313,6 +316,14 @@ class FmLauncherApp(App):
 
     # --- params form -------------------------------------------------------
 
+    def _initial_value(self, field_spec) -> str:
+        """Prefill value for a form field: persisted camera choice for the camera
+        picker (so the phone IP + mac/phone default carry across runs), else the
+        field's declared default."""
+        if field_spec.name in self._camera_cfg:
+            return self._camera_cfg[field_spec.name]
+        return field_spec.default
+
     def _enter_params(self) -> None:
         """Swap the menu for a stacked label+Input per field (mounted in the menu panel)."""
         self._level = _PARAMS
@@ -323,18 +334,24 @@ class FmLauncherApp(App):
         for field_spec in self._action.launch.fields:
             label = field_spec.label + (" *" if field_spec.required else "")
             widgets.append(Label(label, classes="field-label"))
+            initial = self._initial_value(field_spec)
             if field_spec.choices:
                 # A dropdown for one-of fields — pick, don't type.
                 widget = Select(
                     [(c, c) for c in field_spec.choices],
-                    value=field_spec.default,
+                    value=initial,
                     allow_blank=False,
                     id=f"field-{field_spec.name}",
                 )
             else:
-                widget = Input(value=field_spec.default, id=f"field-{field_spec.name}")
+                widget = Input(value=initial, id=f"field-{field_spec.name}")
             self._field_inputs[field_spec.name] = widget
             widgets.append(widget)
+        # An explicit submit control: the first field is often a Select (camera),
+        # and Enter on a Select opens its dropdown rather than submitting. The
+        # button (and Enter in any Input) both dispatch. Tab reaches it; it is the
+        # last widget so it sits below the fields.
+        widgets.append(Button("Launch", id="form-launch", variant="primary"))
         self._param_widgets = widgets
         # Mount into the bordered panel that holds the menu, after the (now hidden) ListView.
         menu.parent.mount(*widgets)
@@ -348,8 +365,13 @@ class FmLauncherApp(App):
             return
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
-        """Enter in any field submits the whole form (defaults are prefilled)."""
+        """Enter in any Input submits the whole form (defaults are prefilled)."""
         if self._level == _PARAMS:
+            self._try_launch()
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        """The form's Launch button submits — the path for when a Select is focused."""
+        if self._level == _PARAMS and event.button.id == "form-launch":
             self._try_launch()
 
     def _try_launch(self) -> None:
@@ -370,6 +392,17 @@ class FmLauncherApp(App):
                 self._field_inputs[field_spec.name].focus()
                 return
             params[field_spec.name] = value
+        # Camera picker: phone needs an IP, and the choice is persisted for the
+        # host relay manager (the container can't start the relay itself). This
+        # runs after the generic checks so choices are already validated.
+        if "camera" in params:
+            if params["camera"] == "phone" and not params.get("phone_ip"):
+                self.notify(
+                    "Phone IP is required when Camera is 'phone'.", severity="warning"
+                )
+                self._field_inputs["phone_ip"].focus()
+                return
+            config.set_camera(params["camera"], params.get("phone_ip", ""))
         self._dispatch(self._variant, self._backend, params)
 
     def _exit_params(self) -> None:
