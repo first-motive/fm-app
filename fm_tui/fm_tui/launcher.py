@@ -1,16 +1,17 @@
 """fm_tui launcher — an arrow-key menu that picks and dispatches a launch.
 
 This is the launcher mode, a sibling to the ``fm_tui`` monitor (``app.py``). It
-walks the declarative :mod:`fm_tui.registry` — action -> robot -> variant, plus a
-backend step for sim/teleop actions — then dispatches the matching ``ros2 launch``
+walks the declarative :mod:`fm_tui.registry` — action -> (mode ->) robot -> variant,
+plus a backend step for sim/teleop specs — then dispatches the matching ``ros2 launch``
 for wired actions::
 
     ◢ FIRST MOTIVE · ROBOT DESCRIPTION › G1_D
     ┏ MENU ────────────────────────────┓
     ┃ ▸ Robot Description               ┃   ← caret marks the highlighted row
-    ┃   Teleop                          ┃
+    ┃   Teleoperation                   ┃   ← mode group: opens Vision Mirror / Leader-Follower
     ┃   Autonomous                      ┃   ← grey: stub, no launch graph yet
     ┃   Simulation                      ┃
+    ┃   Data Capture                    ┃
     ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
     Footer   [Q] QUIT   [ESC] BACK   [V] VIEWER: foxglove
 
@@ -44,13 +45,15 @@ from fm_tools.tui import BorderedPanel, Header, apply_theme
 from fm_tools.tui.palette import LILAC, PLUM
 
 from fm_tui import config
-from fm_tui.registry import Action, Robot, actions
+from fm_tui.registry import Action, Mode, Robot, actions
 
-# Navigation levels, in walk order. Wired sim/teleop actions add a backend step
-# after the variant; robot_description dispatches straight from the variant. Fielded
-# actions (vision) add a params form after the backend before dispatching.
-_ACTION, _ROBOT, _VARIANT, _BACKEND, _PARAMS = (
+# Navigation levels, in walk order. Actions that group modes (teleoperation) add a mode
+# step after the action; the chosen mode then supplies robots/backends/launch. Wired
+# sim/backend actions add a backend step after the variant; robot_description dispatches
+# straight from the variant. Fielded specs (vision) add a params form before dispatching.
+_ACTION, _MODE, _ROBOT, _VARIANT, _BACKEND, _PARAMS = (
     "action",
+    "mode",
     "robot",
     "variant",
     "backend",
@@ -138,6 +141,9 @@ class FmLauncherApp(App):
         super().__init__(**kwargs)
         self._level = _ACTION
         self._action: Action | None = None
+        # Set only while walking a mode-grouping action (teleoperation); supplies the
+        # effective launch/robots/backends from the robot step onward (see _source).
+        self._mode: Mode | None = None
         self._robot: Robot | None = None
         self._variant: str | None = None
         self._backend: str | None = None
@@ -172,6 +178,15 @@ class FmLauncherApp(App):
 
     # --- menu construction -------------------------------------------------
 
+    @property
+    def _source(self):
+        """The launch-bearing object for the current walk: the chosen mode when the
+        action groups modes, else the action itself. Robots, backends, the launch
+        spec, and dispatch all read from here so a mode behaves like a plain action."""
+        if self._action is not None and self._action.has_modes:
+            return self._mode
+        return self._action
+
     def _rebuild(self) -> None:
         """Repopulate the list for the current navigation level."""
         menu = self.query_one("#menu", ListView)
@@ -195,11 +210,17 @@ class FmLauncherApp(App):
 
     def _items_for_level(self) -> list[_MenuItem]:
         if self._level == _ACTION:
-            # Stub actions read as disabled from the grey styling alone — no
-            # "(not yet wired)" suffix needed.
-            return [_MenuItem(a.label, a, stub=not a.wired) for a in actions()]
+            # A mode group (teleoperation) dispatches through its modes, so it is not a
+            # stub even though its own launch is None. Stubs read as disabled from the
+            # grey styling alone — no "(not yet wired)" suffix needed.
+            return [
+                _MenuItem(a.label, a, stub=not a.wired and not a.has_modes)
+                for a in actions()
+            ]
+        if self._level == _MODE:
+            return [_MenuItem(m.label, m, stub=not m.wired) for m in self._action.modes]
         if self._level == _ROBOT:
-            return [_MenuItem(r.label, r) for r in self._action.robots]
+            return [_MenuItem(r.label, r) for r in self._source.robots]
         if self._level == _VARIANT:
             return [
                 _MenuItem(
@@ -214,7 +235,7 @@ class FmLauncherApp(App):
                 b if i != 0 else f"{b}  (default)",
                 b,
             )
-            for i, b in enumerate(self._action.backends)
+            for i, b in enumerate(self._source.backends)
         ]
 
     def _set_prompt(self) -> None:
@@ -223,6 +244,7 @@ class FmLauncherApp(App):
             crumb
             for crumb in (
                 self._action.label if self._action else None,
+                self._mode.label if self._mode else None,
                 self._robot.label if self._robot else None,
                 self._variant,
                 # Backend + a "params" marker only surface once the form is open.
@@ -245,34 +267,50 @@ class FmLauncherApp(App):
         value = event.item.value
         if self._level == _ACTION:
             self._select_action(value)
+        elif self._level == _MODE:
+            self._select_mode(value)
         elif self._level == _ROBOT:
             self._robot = value
             self._level = _VARIANT
             self._rebuild()
         elif self._level == _VARIANT:
-            # Sim/teleop pick a backend next; fielded actions collect a form; the rest dispatch.
-            if self._action.has_backends:
+            # Sim/teleop pick a backend next; fielded specs collect a form; the rest dispatch.
+            if self._source.has_backends:
                 self._variant = value
                 self._level = _BACKEND
                 self._rebuild()
-            elif self._action.launch.has_fields:
+            elif self._source.launch.has_fields:
                 self._variant = value
                 self._enter_params()
             else:
                 self._dispatch(value)
         else:  # _BACKEND
-            # A fielded action (vision) collects its form after the backend; others dispatch.
-            if self._action.launch.has_fields:
+            # A fielded spec (vision) collects its form after the backend; others dispatch.
+            if self._source.launch.has_fields:
                 self._backend = value
                 self._enter_params()
             else:
                 self._dispatch(self._variant, value)
 
     def _select_action(self, act: Action) -> None:
+        # A mode group opens its mode step; its own launch is None, so check modes first.
+        if act.has_modes:
+            self._action = act
+            self._level = _MODE
+            self._rebuild()
+            return
         if not act.wired:
             self.notify(f"{act.label} is not yet wired.", severity="warning")
             return
         self._action = act
+        self._level = _ROBOT
+        self._rebuild()
+
+    def _select_mode(self, mode: Mode) -> None:
+        if not mode.wired:
+            self.notify(f"{mode.label} is not yet wired.", severity="warning")
+            return
+        self._mode = mode
         self._level = _ROBOT
         self._rebuild()
 
@@ -281,7 +319,7 @@ class FmLauncherApp(App):
         if self._level == _PARAMS:
             # Tear the form down and return to the backend step (or variant if backend-less).
             self._exit_params()
-            if self._action.has_backends:
+            if self._source.has_backends:
                 self._level = _BACKEND
                 self._backend = None
             else:
@@ -294,6 +332,14 @@ class FmLauncherApp(App):
             self._level = _ROBOT
             self._robot = None
         elif self._level == _ROBOT:
+            # Under a mode group, step back to the mode step; otherwise to the actions.
+            if self._action.has_modes:
+                self._level = _MODE
+                self._mode = None
+            else:
+                self._level = _ACTION
+                self._action = None
+        elif self._level == _MODE:
             self._level = _ACTION
             self._action = None
         else:
@@ -334,7 +380,7 @@ class FmLauncherApp(App):
         menu.add_class("hidden")
         self._field_inputs = {}
         widgets: list = []
-        for field_spec in self._action.launch.fields:
+        for field_spec in self._source.launch.fields:
             label = field_spec.label + (" *" if field_spec.required else "")
             widgets.append(Label(label, classes="field-label"))
             initial = self._initial_value(field_spec)
@@ -363,7 +409,7 @@ class FmLauncherApp(App):
 
     def _focus_first_field(self) -> None:
         """Focus the first field so the form is immediately typeable."""
-        for field_spec in self._action.launch.fields:
+        for field_spec in self._source.launch.fields:
             self._field_inputs[field_spec.name].focus()
             return
 
@@ -380,7 +426,7 @@ class FmLauncherApp(App):
     def _try_launch(self) -> None:
         """Validate the fields and dispatch, or notify and stay on the form."""
         params: dict[str, str] = {}
-        for field_spec in self._action.launch.fields:
+        for field_spec in self._source.launch.fields:
             # Input.value is typed text; Select.value is the chosen option — both -> str.
             value = str(self._field_inputs[field_spec.name].value).strip()
             if field_spec.required and not value:
@@ -426,7 +472,7 @@ class FmLauncherApp(App):
     ) -> None:
         """Exit with the launch argv; :func:`main` runs it post-teardown."""
         self.exit(
-            self._action.launch.command(
+            self._source.launch.command(
                 self._robot.key, variant, backend, params, viewer=self._viewer
             )
         )

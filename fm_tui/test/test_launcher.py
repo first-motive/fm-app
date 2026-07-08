@@ -18,10 +18,11 @@ from fm_tui.registry import action, actions
 
 
 async def _walk_to_vision_form(pilot):
-    """Drive vision (last action) -> openarm -> right_arm -> mujoco -> the params form."""
+    """Drive teleoperation -> Vision Mirror -> openarm -> right_arm -> mujoco -> params form."""
     menu = pilot.app.query_one("#menu", ListView)
-    menu.index = [a.key for a in actions()].index("vision")
-    await pilot.press("enter")  # action -> robot (openarm, only one)
+    menu.index = [a.key for a in actions()].index("teleoperation")
+    await pilot.press("enter")  # action -> mode (Vision Mirror, first)
+    await pilot.press("enter")  # mode -> robot (openarm, only one)
     await pilot.press("enter")  # robot -> variant (right_arm)
     await pilot.press("enter")  # variant -> backend (mujoco default)
     await pilot.press("enter")  # backend -> params form
@@ -189,7 +190,8 @@ def test_back_from_params_returns_to_backend():
             menu = pilot.app.query_one("#menu", ListView)
             # Back on the backend list (mujoco, mock), menu visible again.
             assert not menu.has_class("hidden")
-            assert len(menu) == len(action("vision").backends)
+            vision = next(m for m in action("teleoperation").modes if m.key == "vision_mirror")
+            assert len(menu) == len(vision.backends)
 
     asyncio.run(go())
 

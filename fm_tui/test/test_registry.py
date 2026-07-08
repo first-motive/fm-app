@@ -1,6 +1,14 @@
-"""Registry tests: structure is valid and the wired/stub split holds."""
+"""Registry tests: structure is valid and the wired/mode-group/stub split holds."""
 
 from fm_tui.registry import ACTIONS, Robot, action, actions
+
+
+def _mode(action_key, mode_key):
+    """Look up a mode by key under a mode-grouping action."""
+    for mode in action(action_key).modes:
+        if mode.key == mode_key:
+            return mode
+    raise KeyError(f"{action_key}/{mode_key}")
 
 
 def test_actions_have_unique_keys():
@@ -24,18 +32,55 @@ def test_autonomous_is_a_stub():
     assert entry.robots == ()
 
 
-def test_simulation_and_teleop_are_wired_with_backends():
-    for key in ("simulation", "teleop"):
-        entry = action(key)
-        assert entry.wired
-        assert entry.has_backends
-        assert {r.key for r in entry.robots} == {"openarm", "so101", "g1_d", "axol"}
-        assert "mujoco" in entry.backends
+def test_simulation_is_wired_with_backends():
+    entry = action("simulation")
+    assert entry.wired
+    assert entry.has_backends
+    assert not entry.has_modes
+    assert {r.key for r in entry.robots} == {"openarm", "so101", "g1_d", "axol"}
+    assert "mujoco" in entry.backends
+
+
+def test_teleoperation_is_a_mode_group():
+    entry = action("teleoperation")
+    # A mode group carries no launch/robots of its own — it dispatches through its modes.
+    assert entry.has_modes
+    assert not entry.wired
+    assert entry.launch is None
+    assert entry.robots == ()
+    assert [m.key for m in entry.modes] == ["vision_mirror", "leader_follower"]
+    # Both modes are wired and keep the backend step.
+    for mode in entry.modes:
+        assert mode.wired
+        assert mode.has_backends
+
+
+def test_leader_follower_mode_carries_the_teleop_launch():
+    lf = _mode("teleoperation", "leader_follower")
+    assert lf.launch.launch_file == "teleop.launch.py"
+    assert {r.key for r in lf.robots} == {"openarm", "so101", "g1_d", "axol"}
+    assert "mujoco" in lf.backends
+
+
+def test_data_capture_is_wired_and_records():
+    entry = action("data_capture")
+    assert entry.wired
+    assert entry.has_backends
+    # fm_data is absent in this checkout, so it degrades to the vision session.
+    assert entry.launch.launch_file == "vision_session.launch.py"
+    # record:=true rides in the argv (the record field defaults "true").
+    cmd = entry.launch.command("openarm", "right_arm", "mujoco")
+    assert "record:=true" in cmd
 
 
 def test_every_robot_default_is_a_listed_variant():
+    def robots_of(entry):
+        yield from entry.robots
+        for mode in getattr(entry, "modes", ()):
+            yield from mode.robots
+
     for entry in actions():
-        for robot in entry.robots:
+        for robot in robots_of(entry):
             assert robot.default_variant in robot.variants
 
 
@@ -63,7 +108,7 @@ def test_launch_command_appends_backend_when_set():
 
 
 def test_vision_is_wired_with_fields_and_openarm_only():
-    entry = action("vision")
+    entry = _mode("teleoperation", "vision_mirror")
     assert entry.wired
     assert entry.has_backends
     assert entry.launch.has_fields
@@ -86,7 +131,7 @@ def test_vision_is_wired_with_fields_and_openarm_only():
 
 
 def test_vision_command_appends_only_launch_fields_after_backend():
-    spec = action("vision").launch
+    spec = _mode("teleoperation", "vision_mirror").launch
     cmd = spec.command(
         "openarm",
         "right_arm",
@@ -121,7 +166,7 @@ def test_vision_command_appends_only_launch_fields_after_backend():
 
 
 def test_vision_command_uses_field_defaults_when_params_absent():
-    spec = action("vision").launch
+    spec = _mode("teleoperation", "vision_mirror").launch
     cmd = spec.command("openarm", "right_arm", "mujoco")
     # Only the non-host_only fields fall back to defaults, in declaration order.
     assert cmd[-5:] == [

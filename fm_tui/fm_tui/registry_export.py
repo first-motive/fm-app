@@ -3,8 +3,8 @@
 The TUI walks :mod:`fm_tui.registry` in-process to draw its menu. A native front
 end (the ``fm-desktop`` macOS app) runs in a different language and process, so it
 cannot import the dataclasses. This module serialises the same registry — actions,
-robots, variants, backends, and the defaults — to a stable JSON document those
-front ends read once and rebuild their menu from.
+their optional modes, robots, variants, backends, and the defaults — to a stable JSON
+document those front ends read once and rebuild their menu from.
 
 The document carries everything :meth:`fm_tui.registry.LaunchSpec.command` needs to
 rebuild a launch argv without importing Python: each wired action's launch spec
@@ -27,11 +27,12 @@ import json
 import sys
 
 from fm_tui import config
-from fm_tui.registry import Action, LaunchSpec, actions
+from fm_tui.registry import Action, LaunchSpec, Mode, actions
 
 # Bump on any breaking shape change to the exported document. Readers pin the
 # major they understand and refuse anything newer.
-SCHEMA_VERSION = 1
+#   2  added the optional per-action `modes` level (action -> mode -> robot -> …).
+SCHEMA_VERSION = 2
 
 
 def _launch_to_dict(launch: LaunchSpec) -> dict:
@@ -46,23 +47,44 @@ def _launch_to_dict(launch: LaunchSpec) -> dict:
     }
 
 
+def _robots_to_list(robots) -> list:
+    """Serialise a robots tuple — key, label, variants, and the default variant."""
+    return [
+        {
+            "key": robot.key,
+            "label": robot.label,
+            "variants": list(robot.variants),
+            "default_variant": robot.default_variant,
+        }
+        for robot in robots
+    ]
+
+
+def _mode_to_dict(mode: Mode) -> dict:
+    """Serialise one mode: the launch-bearing shape (launch, robots, backends) a reader
+    treats as the effective action once the operator picks it."""
+    return {
+        "key": mode.key,
+        "label": mode.label,
+        "wired": mode.wired,
+        "launch": _launch_to_dict(mode.launch) if mode.launch else None,
+        "robots": _robots_to_list(mode.robots),
+        "backends": list(mode.backends),
+    }
+
+
 def _action_to_dict(action: Action) -> dict:
-    """Serialise one action: its launch spec (or null for a stub), robots, backends."""
+    """Serialise one action: its launch spec (or null for a stub/mode group), robots,
+    backends, and any modes. A mode group carries no launch/robots of its own; its
+    launch-bearing shape lives in each entry of ``modes``."""
     return {
         "key": action.key,
         "label": action.label,
         "wired": action.wired,
         "launch": _launch_to_dict(action.launch) if action.launch else None,
-        "robots": [
-            {
-                "key": robot.key,
-                "label": robot.label,
-                "variants": list(robot.variants),
-                "default_variant": robot.default_variant,
-            }
-            for robot in action.robots
-        ],
+        "robots": _robots_to_list(action.robots),
         "backends": list(action.backends),
+        "modes": [_mode_to_dict(mode) for mode in action.modes],
     }
 
 

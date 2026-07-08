@@ -1,20 +1,22 @@
 """Declarative registry — the single source of truth for the launcher menu.
 
 The launcher (``fm_tui.launcher``) walks this structure to draw its menu and to
-build the command it dispatches: action -> robot -> variant. Keeping the menu as
-data, not control flow, means a new robot or variant is one entry here, not a new
-screen branch.
+build the command it dispatches: action -> (mode ->) robot -> variant. Keeping the
+menu as data, not control flow, means a new robot or variant is one entry here, not
+a new screen branch.
 
-Two kinds of action live side by side:
+Three kinds of action live side by side:
 
 - **Wired** actions own a :class:`LaunchSpec`. The launcher runs
   ``ros2 launch <package> <launch_file> <robot_arg>:=<robot> <variant_arg>:=<variant>``
-  for them. ``robot_description`` is the only wired action today; it converges on
-  the same ``fm_description view_robot.launch.py`` that ``scripts/view-robot.sh``
+  for them (``robot_description``, ``simulation``, ``data_capture``). ``robot_description``
+  converges on the same ``fm_description view_robot.launch.py`` that ``scripts/view-robot.sh``
   drives from the host, so the two entry points stay decoupled.
-- **Stub** actions (``teleop``, ``autonomous``) carry ``launch=None`` and render
-  disabled. They mark planned surface so the menu shape is stable before the
-  launch graph exists.
+- **Mode groups** carry ``launch=None`` but a non-empty ``modes`` tuple (``teleoperation``:
+  Vision Mirror / Leader-Follower). The launcher inserts a mode-selection step; the chosen
+  :class:`Mode` supplies the launch spec, robots, and backends from the robot step onward.
+- **Stub** actions (``autonomous``) carry ``launch=None`` and no modes, and render disabled.
+  They mark planned surface so the menu shape is stable before the launch graph exists.
 
 Robot and variant lists mirror ``fm_description``'s ``view_robot.launch.py``
 registry. The duplication is deliberate for v1 — the launch file owns dispatch
@@ -99,6 +101,10 @@ class LaunchSpec:
         if self.viewer_aware and viewer:
             # Pass both flags explicitly so the argv is unambiguous regardless of
             # the launch file's own defaults. foxglove is the standing default.
+            # Only rviz turns the foxglove_bridge off and rviz on. Both foxglove
+            # and panel keep the bridge up (:8765): panel is the fm_viewer browser
+            # page over that same bridge, so it needs the bridge but launches no
+            # Foxglove desktop app (that gating is host-side, not in this argv).
             use_rviz = viewer == "rviz"
             argv.append(f"use_foxglove:={'false' if use_rviz else 'true'}")
             argv.append(f"use_rviz:={'true' if use_rviz else 'false'}")
@@ -127,8 +133,36 @@ class Robot:
 
 
 @dataclass(frozen=True)
+class Mode:
+    """A sub-action under an action that groups modes (e.g. Teleoperation ->
+    Vision Mirror / Leader-Follower).
+
+    A mode carries its own launch spec, robots, and backends — the same launch-bearing
+    shape an :class:`Action` has. Once the operator picks a mode, the launcher treats it
+    as the effective action from the robot step onward, so dispatch is identical to a
+    mode-less action's.
+    """
+
+    key: str
+    label: str
+    launch: LaunchSpec | None = None
+    robots: tuple[Robot, ...] = field(default_factory=tuple)
+    backends: tuple[str, ...] = field(default_factory=tuple)
+
+    @property
+    def wired(self) -> bool:
+        """True when this mode can dispatch a launch."""
+        return self.launch is not None
+
+    @property
+    def has_backends(self) -> bool:
+        """True when the launcher should add a backend selection step."""
+        return bool(self.backends)
+
+
+@dataclass(frozen=True)
 class Action:
-    """A top-level menu entry: wired (has a launch spec) or a stub."""
+    """A top-level menu entry: wired (has a launch spec), a mode group, or a stub."""
 
     key: str
     label: str
@@ -137,16 +171,24 @@ class Action:
     # Sim backends this action offers; empty means no backend step (robot -> variant
     # dispatches directly).
     backends: tuple[str, ...] = field(default_factory=tuple)
+    # Optional mode level (action -> mode -> robot -> …). When set, the action is a group:
+    # it carries no launch/robots of its own and the launcher inserts a mode-selection step.
+    modes: tuple[Mode, ...] = field(default_factory=tuple)
 
     @property
     def wired(self) -> bool:
-        """True when this action can dispatch a launch."""
+        """True when this action can dispatch a launch directly (no mode step)."""
         return self.launch is not None
 
     @property
     def has_backends(self) -> bool:
         """True when the launcher should add a backend selection step."""
         return bool(self.backends)
+
+    @property
+    def has_modes(self) -> bool:
+        """True when the launcher should add a mode-selection step after the action."""
+        return bool(self.modes)
 
 
 # Robot + variant lists mirror fm_description/launch/view_robot.launch.py.
@@ -278,6 +320,65 @@ _VISION_ROBOTS = (
 _VISION_BACKENDS = ("mujoco", "mock")
 
 
+def _has_package(name: str) -> bool:
+    """True when ``name`` is discoverable in the ament index.
+
+    ``ament_index_python`` is imported lazily (and its absence tolerated) so the registry
+    stays importable off a ROS environment — bare ``py_compile`` and the pure-Python tests
+    never need it. Used to detect the optional ``fm_data`` learning overlay.
+    """
+    try:
+        from ament_index_python.packages import (
+            PackageNotFoundError,
+            get_package_share_directory,
+        )
+    except ImportError:
+        return False
+    try:
+        get_package_share_directory(name)
+        return True
+    except PackageNotFoundError:
+        return False
+
+
+# Teleoperation groups its inputs as modes: the 1:1 vision hand-mirror (sim + mirror teleop
+# + recorder + reset, one launch) and the leader-follower device/browser path. Each mode keeps
+# the exact launch spec, robots, and backends the old top-level actions carried, so behaviour is
+# unchanged — only the menu shape moves them under one "Teleoperation" parent.
+_VISION_MODE = Mode(
+    key="vision_mirror",
+    label="Vision Mirror",
+    launch=_VISION,
+    robots=_VISION_ROBOTS,
+    backends=_VISION_BACKENDS,
+)
+_LEADER_FOLLOWER_MODE = Mode(
+    key="leader_follower",
+    label="Leader-Follower",
+    launch=_TELEOP,
+    robots=_SIM_ROBOTS,
+    backends=_SIM_BACKENDS,
+)
+
+# Data Capture records a dataset. Today it drives the vision session with the recorder on
+# (vision_session.launch.py — the `record` field defaults "true", so record:=true rides in the
+# argv). Once the private learning overlay is installed it ships an `fm_data` package with
+# dedicated dataset tooling; probe the ament index and swap the launch in when present,
+# degrading to the vision session when absent. The fm_data launch name/args reconcile with the
+# overlay when it lands.
+_FM_DATA = LaunchSpec(
+    package="fm_data",
+    launch_file="record.launch.py",
+    backend_arg="sim_backend",
+    fields=_VISION_FIELDS,
+)
+
+
+def _data_capture_launch() -> LaunchSpec:
+    """The Data Capture launch: fm_data dataset tooling when installed, else the vision session."""
+    return _FM_DATA if _has_package("fm_data") else _VISION
+
+
 ACTIONS: tuple[Action, ...] = (
     Action(
         key="robot_description",
@@ -285,22 +386,11 @@ ACTIONS: tuple[Action, ...] = (
         launch=_VIEW_ROBOT,
         robots=_ROBOTS,
     ),
-    # Vision 1:1 hand-mirror teleop — one-shot full session (sim + mirror + recorder + reset).
-    # Placed high and labelled distinctly so it is not confused with the generic "Teleop" below
-    # (which defaults to the foxglove/browser input, no camera).
+    # Mode group — carries no launch of its own; the launcher inserts a mode step.
     Action(
-        key="vision",
-        label="Vision Teleop (1:1 mirror)",
-        launch=_VISION,
-        robots=_VISION_ROBOTS,
-        backends=_VISION_BACKENDS,
-    ),
-    Action(
-        key="teleop",
-        label="Teleop (device / browser input)",
-        launch=_TELEOP,
-        robots=_SIM_ROBOTS,
-        backends=_SIM_BACKENDS,
+        key="teleoperation",
+        label="Teleoperation",
+        modes=(_VISION_MODE, _LEADER_FOLLOWER_MODE),
     ),
     # Stub — planned surface, no launch graph yet. launch=None renders disabled.
     Action(key="autonomous", label="Autonomous"),
@@ -310,6 +400,13 @@ ACTIONS: tuple[Action, ...] = (
         launch=_SIM,
         robots=_SIM_ROBOTS,
         backends=_SIM_BACKENDS,
+    ),
+    Action(
+        key="data_capture",
+        label="Data Capture",
+        launch=_data_capture_launch(),
+        robots=_VISION_ROBOTS,
+        backends=_VISION_BACKENDS,
     ),
 )
 

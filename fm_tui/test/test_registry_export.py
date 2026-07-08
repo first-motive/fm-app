@@ -62,6 +62,30 @@ def test_backends_round_trip():
         assert action["backends"] == list(src[action["key"]].backends)
 
 
+def test_modes_round_trip_with_launch_bearing_shape():
+    src = {a.key: a for a in actions()}
+    for action in _roundtrip()["actions"]:
+        want = src[action["key"]]
+        assert [m["key"] for m in action["modes"]] == [m.key for m in want.modes]
+        for got, exp in zip(action["modes"], want.modes):
+            assert got["label"] == exp.label
+            assert got["wired"] == exp.wired
+            assert got["backends"] == list(exp.backends)
+            assert [r["key"] for r in got["robots"]] == [r.key for r in exp.robots]
+            if exp.launch:
+                assert got["launch"]["launch_file"] == exp.launch.launch_file
+
+
+def test_teleoperation_group_serialises_its_modes():
+    by_key = {a["key"]: a for a in _roundtrip()["actions"]}
+    teleop = by_key["teleoperation"]
+    # A mode group carries no launch of its own; its modes hold the launch-bearing shape.
+    assert teleop["wired"] is False
+    assert teleop["launch"] is None
+    assert [m["key"] for m in teleop["modes"]] == ["vision_mirror", "leader_follower"]
+    assert all(m["launch"] is not None for m in teleop["modes"])
+
+
 def _argv_from_launch(launch: dict, robot, variant, backend=None, viewer=None):
     """Rebuild a launch argv from the serialised launch dict.
 
