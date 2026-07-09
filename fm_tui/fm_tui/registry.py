@@ -25,7 +25,7 @@ params, this file owns the menu — and is reconcilable later.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 
 @dataclass(frozen=True)
@@ -370,23 +370,30 @@ _LEADER_FOLLOWER_MODE = Mode(
     backends=_SIM_BACKENDS,
 )
 
-# Data Capture records a dataset. Today it drives the vision session with the recorder on
-# (vision_session.launch.py — the `record` field defaults "true", so record:=true rides in the
-# argv). Once the private learning overlay is installed it ships an `fm_data` package with
-# dedicated dataset tooling; probe the ament index and swap the launch in when present,
-# degrading to the vision session when absent. The fm_data launch name/args reconcile with the
-# overlay when it lands.
+# Data Capture records a dataset. Today it drives the vision session with the recorder
+# forced on: the shared vision teleop launch (_VISION) leaves recording runtime-toggled,
+# so Data Capture rides on a copy that adds a `record` field defaulting "true" — record:=true
+# then rides in the argv even without opening the form. Once the private learning overlay is
+# installed it ships an `fm_data` package with dedicated dataset tooling; probe the ament index
+# and swap the launch in when present, degrading to the vision session when absent. The fm_data
+# launch name/args reconcile with the overlay when it lands.
+_VISION_CAPTURE = replace(
+    _VISION,
+    fields=_VISION_FIELDS + (Field("record", "Record dataset", "true", choices=("true", "false")),),
+)
+
 _FM_DATA = LaunchSpec(
     package="fm_data",
     launch_file="record.launch.py",
     backend_arg="sim_backend",
-    fields=_VISION_FIELDS,
+    fields=_VISION_CAPTURE.fields,
 )
 
 
 def _data_capture_launch() -> LaunchSpec:
-    """The Data Capture launch: fm_data dataset tooling when installed, else the vision session."""
-    return _FM_DATA if _has_package("fm_data") else _VISION
+    """The Data Capture launch: fm_data dataset tooling when installed, else the vision session
+    with the recorder forced on."""
+    return _FM_DATA if _has_package("fm_data") else _VISION_CAPTURE
 
 
 ACTIONS: tuple[Action, ...] = (

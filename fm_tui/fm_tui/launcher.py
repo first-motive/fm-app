@@ -422,7 +422,7 @@ class FmLauncherApp(App):
         and input are hidden together otherwise. Hidden fields keep their value, so the
         launch args and camera-config persistence in :meth:`_try_launch` are unaffected.
         """
-        for field_spec in self._action.launch.fields:
+        for field_spec in self._source.launch.fields:
             if not field_spec.show_if:
                 continue
             ctrl_name, want = field_spec.show_if
