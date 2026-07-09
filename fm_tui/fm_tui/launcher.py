@@ -147,8 +147,11 @@ class FmLauncherApp(App):
         self._robot: Robot | None = None
         self._variant: str | None = None
         self._backend: str | None = None
-        # Mounted Input widgets (name -> Input) and every form widget, live only on _PARAMS.
+        # Mounted Input widgets (name -> Input), their labels (name -> Label), and every
+        # form widget. All live only on _PARAMS; labels are tracked so conditional fields
+        # (e.g. the phone IP) can hide their prompt as well as their input.
         self._field_inputs: dict[str, Input] = {}
+        self._field_labels: dict[str, Label] = {}
         self._param_widgets: list = []
         # The standing viewer default, loaded from the persisted config. The `v`
         # binding flips and re-persists it; _dispatch reads it at launch time.
@@ -379,10 +382,13 @@ class FmLauncherApp(App):
         menu = self.query_one("#menu", ListView)
         menu.add_class("hidden")
         self._field_inputs = {}
+        self._field_labels = {}
         widgets: list = []
         for field_spec in self._source.launch.fields:
             label = field_spec.label + (" *" if field_spec.required else "")
-            widgets.append(Label(label, classes="field-label"))
+            label_widget = Label(label, classes="field-label")
+            self._field_labels[field_spec.name] = label_widget
+            widgets.append(label_widget)
             initial = self._initial_value(field_spec)
             if field_spec.choices:
                 # A dropdown for one-of fields — pick, don't type.
@@ -404,8 +410,33 @@ class FmLauncherApp(App):
         self._param_widgets = widgets
         # Mount into the bordered panel that holds the menu, after the (now hidden) ListView.
         menu.parent.mount(*widgets)
+        self._apply_field_visibility()
         self._set_prompt()
         self.call_after_refresh(self._focus_first_field)
+
+    def _apply_field_visibility(self) -> None:
+        """Show/hide conditional fields against their controlling field's current value.
+
+        A field with ``show_if=(name, value)`` (e.g. the phone IP, gated on Camera ==
+        "phone") is displayed only while the controlling field holds ``value``; its label
+        and input are hidden together otherwise. Hidden fields keep their value, so the
+        launch args and camera-config persistence in :meth:`_try_launch` are unaffected.
+        """
+        for field_spec in self._action.launch.fields:
+            if not field_spec.show_if:
+                continue
+            ctrl_name, want = field_spec.show_if
+            ctrl = self._field_inputs.get(ctrl_name)
+            visible = ctrl is not None and str(ctrl.value) == want
+            self._field_inputs[field_spec.name].display = visible
+            label = self._field_labels.get(field_spec.name)
+            if label is not None:
+                label.display = visible
+
+    def on_select_changed(self, event: Select.Changed) -> None:
+        """Re-evaluate conditional field visibility when a controlling Select changes."""
+        if self._level == _PARAMS:
+            self._apply_field_visibility()
 
     def _focus_first_field(self) -> None:
         """Focus the first field so the form is immediately typeable."""
@@ -460,6 +491,7 @@ class FmLauncherApp(App):
             widget.remove()
         self._param_widgets = []
         self._field_inputs = {}
+        self._field_labels = {}
         self.query_one("#menu", ListView).remove_class("hidden")
 
     # --- dispatch ----------------------------------------------------------

@@ -121,13 +121,14 @@ def test_vision_is_wired_with_fields_and_openarm_only():
         "phone_ip",
         "rotate_deg",
         "tracking_mode",
-        "publish_debug_image",
-        "record",
         "gripper",
     ]
     # The camera picker is host_only: collected + persisted for the host relay
     # manager, never a launch arg. Every other field must match a vision_session arg.
     assert {f.name for f in entry.launch.fields if f.host_only} == {"camera", "phone_ip"}
+    # The phone IP is form-conditional: shown only when Camera == "phone".
+    phone_ip = next(f for f in entry.launch.fields if f.name == "phone_ip")
+    assert phone_ip.show_if == ("camera", "phone")
 
 
 def test_vision_command_appends_only_launch_fields_after_backend():
@@ -138,11 +139,9 @@ def test_vision_command_appends_only_launch_fields_after_backend():
         "mujoco",
         params={
             "camera": "phone",
-            "phone_ip": "192.168.1.207:8081",
+            "phone_ip": "192.168.1.207",
             "rotate_deg": "90",
             "tracking_mode": "hand",
-            "publish_debug_image": "true",
-            "record": "true",
             "gripper": "off",
         },
     )
@@ -156,8 +155,6 @@ def test_vision_command_appends_only_launch_fields_after_backend():
         "sim_backend:=mujoco",
         "rotate_deg:=90",
         "tracking_mode:=hand",
-        "publish_debug_image:=true",
-        "record:=true",
         "gripper:=off",
     ]
     # host_only picker fields never reach the launch argv (they drive the host relay).
@@ -169,11 +166,9 @@ def test_vision_command_uses_field_defaults_when_params_absent():
     spec = _mode("teleoperation", "vision_mirror").launch
     cmd = spec.command("openarm", "right_arm", "mujoco")
     # Only the non-host_only fields fall back to defaults, in declaration order.
-    assert cmd[-5:] == [
+    assert cmd[-3:] == [
         "rotate_deg:=90",
         "tracking_mode:=hand",
-        "publish_debug_image:=true",
-        "record:=true",
         "gripper:=off",
     ]
     # camera / phone_ip are host_only, so no camera token appears in the argv.

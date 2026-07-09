@@ -47,6 +47,11 @@ class Field:
     # run on the host (see scripts/run/camera-bridge.sh), so the container launch
     # never sees it — command() skips host_only fields.
     host_only: bool = False
+    # Conditional visibility: when set to ``(field_name, value)``, the launcher
+    # shows this field only while the named sibling field holds ``value`` (e.g. the
+    # phone IP appears only when Camera == "phone"). Purely a form-display hint —
+    # command() and the export ignore it; a hidden field still carries its default.
+    show_if: tuple[str, str] = ()
 
 
 @dataclass(frozen=True)
@@ -291,14 +296,19 @@ _VISION_FIELDS = (
     Field("camera", "Camera", "phone", choices=("phone", "mac"), host_only=True),
     Field(
         "phone_ip",
-        "Phone IP[:port]  (phone only, e.g. 192.168.1.207:8081)",
+        "Phone IP  (phone only, e.g. 192.168.1.207)",
         "",
         host_only=True,
+        # Only relevant to the phone relay — hidden unless Camera == "phone". The operator
+        # types just the LAN IP: the host relay (scripts/run/camera-bridge.sh) appends the
+        # IP-webcam port (:8081) when none is given, so no port belongs here.
+        show_if=("camera", "phone"),
     ),
     Field("rotate_deg", "Rotate clockwise (0/90/180/270)", "90"),
     Field("tracking_mode", "Tracking mode", "hand", choices=("hand", "full_body")),
-    Field("publish_debug_image", "Publish /vision/image", "true", choices=("true", "false")),
-    Field("record", "Auto-start recorder", "true", choices=("true", "false")),
+    # publish_debug_image is intentionally not a form field: /vision/image (the skeleton
+    # overlay the Foxglove/web viewers read) is always on for this session. vision_session
+    # defaults the launch arg to true, so omitting it here keeps it published.
     # Run the arm with the pinch gripper (hand open/close drives the pinchers) or without it.
     Field("gripper", "Gripper (pinchers)", "off", choices=("on", "off")),
 )
