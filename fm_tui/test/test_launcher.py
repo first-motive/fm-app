@@ -124,7 +124,6 @@ def test_vision_form_dispatches_mac_needs_no_ip(monkeypatch, tmp_path):
             "sim_backend:=mujoco",
             "rotate_deg:=90",
             "tracking_mode:=hand",
-            "publish_debug_image:=true",
             "gripper:=off",
         ]
         # The choice is persisted for the host camera manager.
@@ -150,8 +149,8 @@ def test_vision_form_phone_requires_ip_then_persists(monkeypatch, tmp_path):
             await pilot.pause()
             assert pilot.app.is_running
             assert pilot.app.return_value is None
-            # Provide the IP -> dispatches.
-            pilot.app.query_one("#field-phone_ip", Input).value = "192.168.1.207:8081"
+            # Provide the IP (bare LAN IP, no port) -> dispatches.
+            pilot.app.query_one("#field-phone_ip", Input).value = "192.168.1.207"
             await pilot.press("enter")
             await pilot.pause()
         assert pilot.app.return_value is not None
@@ -159,7 +158,7 @@ def test_vision_form_phone_requires_ip_then_persists(monkeypatch, tmp_path):
         # Persisted for the host relay manager, IP included for next-run prefill.
         assert config.get_camera() == {
             "camera": "phone",
-            "phone_ip": "192.168.1.207:8081",
+            "phone_ip": "192.168.1.207",
         }
 
     asyncio.run(go())

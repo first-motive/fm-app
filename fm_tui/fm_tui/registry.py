@@ -254,15 +254,19 @@ _VISION_FIELDS = (
     Field("camera", "Camera", "phone", choices=("phone", "mac"), host_only=True),
     Field(
         "phone_ip",
-        "Phone IP[:port]  (phone only, e.g. 192.168.1.207:8081)",
+        "Phone IP  (phone only, e.g. 192.168.1.207)",
         "",
         host_only=True,
-        # Only relevant to the phone relay — hidden unless Camera == "phone".
+        # Only relevant to the phone relay — hidden unless Camera == "phone". The operator
+        # types just the LAN IP: the host relay (scripts/run/camera-bridge.sh) appends the
+        # IP-webcam port (:8081) when none is given, so no port belongs here.
         show_if=("camera", "phone"),
     ),
     Field("rotate_deg", "Rotate clockwise (0/90/180/270)", "90"),
     Field("tracking_mode", "Tracking mode", "hand", choices=("hand", "full_body")),
-    Field("publish_debug_image", "Publish /vision/image", "true", choices=("true", "false")),
+    # publish_debug_image is intentionally not a form field: /vision/image (the skeleton
+    # overlay the Foxglove/web viewers read) is always on for this session. vision_session
+    # defaults the launch arg to true, so omitting it here keeps it published.
     # Run the arm with the pinch gripper (hand open/close drives the pinchers) or without it.
     Field("gripper", "Gripper (pinchers)", "off", choices=("on", "off")),
 )
