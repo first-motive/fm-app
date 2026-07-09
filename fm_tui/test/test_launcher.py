@@ -107,6 +107,8 @@ def test_vision_form_dispatches_mac_needs_no_ip(monkeypatch, tmp_path):
             # Pick the Mac built-in camera — no IP required.
             pilot.app.query_one("#field-camera", Select).value = "mac"
             await pilot.pause()
+            # The phone IP field hides itself once the camera is not "phone".
+            assert not pilot.app.query_one("#field-phone_ip", Input).display
             # Submit via the Launch button (Enter on a Select opens its dropdown).
             pilot.app.set_focus(pilot.app.query_one("#form-launch", Button))
             await pilot.press("enter")  # button press -> dispatch + exit
@@ -123,7 +125,6 @@ def test_vision_form_dispatches_mac_needs_no_ip(monkeypatch, tmp_path):
             "rotate_deg:=90",
             "tracking_mode:=hand",
             "publish_debug_image:=true",
-            "record:=true",
             "gripper:=off",
         ]
         # The choice is persisted for the host camera manager.
@@ -141,6 +142,8 @@ def test_vision_form_phone_requires_ip_then_persists(monkeypatch, tmp_path):
             await _walk_to_vision_form(pilot)
             # Camera defaults to phone with an empty IP -> submitting is blocked.
             assert pilot.app.query_one("#field-camera", Select).value == "phone"
+            # Camera == "phone", so the phone IP field is shown.
+            assert pilot.app.query_one("#field-phone_ip", Input).display
             pilot.app.query_one("#field-phone_ip", Input).focus()
             await pilot.pause()
             await pilot.press("enter")  # Enter in the (empty) IP field -> blocked

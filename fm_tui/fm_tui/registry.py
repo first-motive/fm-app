@@ -45,6 +45,11 @@ class Field:
     # run on the host (see scripts/run/camera-bridge.sh), so the container launch
     # never sees it — command() skips host_only fields.
     host_only: bool = False
+    # Conditional visibility: when set to ``(field_name, value)``, the launcher
+    # shows this field only while the named sibling field holds ``value`` (e.g. the
+    # phone IP appears only when Camera == "phone"). Purely a form-display hint —
+    # command() and the export ignore it; a hidden field still carries its default.
+    show_if: tuple[str, str] = ()
 
 
 @dataclass(frozen=True)
@@ -252,11 +257,12 @@ _VISION_FIELDS = (
         "Phone IP[:port]  (phone only, e.g. 192.168.1.207:8081)",
         "",
         host_only=True,
+        # Only relevant to the phone relay — hidden unless Camera == "phone".
+        show_if=("camera", "phone"),
     ),
     Field("rotate_deg", "Rotate clockwise (0/90/180/270)", "90"),
     Field("tracking_mode", "Tracking mode", "hand", choices=("hand", "full_body")),
     Field("publish_debug_image", "Publish /vision/image", "true", choices=("true", "false")),
-    Field("record", "Auto-start recorder", "true", choices=("true", "false")),
     # Run the arm with the pinch gripper (hand open/close drives the pinchers) or without it.
     Field("gripper", "Gripper (pinchers)", "off", choices=("on", "off")),
 )
