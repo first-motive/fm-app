@@ -18,10 +18,11 @@ from fm_tui.registry import action, actions
 
 
 async def _walk_to_vision_form(pilot):
-    """Drive vision (last action) -> openarm -> right_arm -> mujoco -> the params form."""
+    """Drive teleoperation -> Vision Mirror -> openarm -> right_arm -> mujoco -> params form."""
     menu = pilot.app.query_one("#menu", ListView)
-    menu.index = [a.key for a in actions()].index("vision")
-    await pilot.press("enter")  # action -> robot (openarm, only one)
+    menu.index = [a.key for a in actions()].index("teleoperation")
+    await pilot.press("enter")  # action -> mode (Vision Mirror, first)
+    await pilot.press("enter")  # mode -> robot (openarm, only one)
     await pilot.press("enter")  # robot -> variant (right_arm)
     await pilot.press("enter")  # variant -> backend (mujoco default)
     await pilot.press("enter")  # backend -> params form
@@ -191,7 +192,8 @@ def test_back_from_params_returns_to_backend():
             menu = pilot.app.query_one("#menu", ListView)
             # Back on the backend list (mujoco, mock), menu visible again.
             assert not menu.has_class("hidden")
-            assert len(menu) == len(action("vision").backends)
+            vision = next(m for m in action("teleoperation").modes if m.key == "vision_mirror")
+            assert len(menu) == len(vision.backends)
 
     asyncio.run(go())
 
@@ -285,10 +287,17 @@ def test_toggle_flips_persists_and_relabels(monkeypatch, tmp_path):
             await pilot.press("v")
             await pilot.pause()
             assert app._viewer == "rviz"
-            # The footer label follows the flip.
+            # The footer label follows the cycle.
             assert app._bindings.keys["v"].description == "VIEWER: rviz"
-        # The flip is persisted, so a fresh launcher would open on rviz.
-        assert config.get_viewer() == "rviz"
+            # V cycles all three (foxglove -> rviz -> panel -> foxglove).
+            await pilot.press("v")
+            await pilot.pause()
+            assert app._viewer == "panel"
+            await pilot.press("v")
+            await pilot.pause()
+            assert app._viewer == "foxglove"
+        # The last flip is persisted.
+        assert config.get_viewer() == "foxglove"
 
     asyncio.run(go())
 
@@ -331,7 +340,7 @@ def test_macos_toggle_to_rviz_warns(monkeypatch, tmp_path):
     asyncio.run(go())
 
 
-def test_macos_toggle_back_to_foxglove_is_silent(monkeypatch, tmp_path):
+def test_macos_toggle_off_rviz_is_silent(monkeypatch, tmp_path):
     monkeypatch.setenv("FM_TUI_CONFIG", str(tmp_path / "cfg.json"))
     monkeypatch.setenv("FM_HOST_OS", "macos")
     config.set_viewer("rviz")
@@ -343,9 +352,9 @@ def test_macos_toggle_back_to_foxglove_is_silent(monkeypatch, tmp_path):
             monkeypatch.setattr(
                 app, "notify", lambda message, **kw: warnings.append((message, kw))
             )
-            await pilot.press("v")  # rviz -> foxglove: no warning
+            await pilot.press("v")  # rviz -> panel: no warning (only entering rviz warns)
             await pilot.pause()
-        assert app._viewer == "foxglove"
+        assert app._viewer == "panel"
         assert not warnings
 
     asyncio.run(go())

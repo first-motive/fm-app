@@ -28,7 +28,11 @@ _DEFAULTS = {"viewer": "foxglove"}
 
 # The viewers the launcher can dispatch. get_viewer() falls back to the default
 # for any value outside this set, so a hand-edited config can never wedge the UI.
-VIEWERS = ("foxglove", "rviz")
+#   foxglove  the Foxglove desktop app over foxglove_bridge (:8765)
+#   rviz      rviz2 (native on Linux; browser-over-VNC on macOS)
+#   panel     the fm_viewer browser page over the same foxglove_bridge (:8765) —
+#             keeps the bridge up but opens no Foxglove desktop app
+VIEWERS = ("foxglove", "rviz", "panel")
 
 
 def config_path() -> Path:

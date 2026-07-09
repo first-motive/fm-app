@@ -11,6 +11,7 @@
 
   <exec_depend>fm_bringup</exec_depend>
   <exec_depend>fm_tui</exec_depend>
+  <exec_depend>fm_viewer</exec_depend>
 
   <export>
     <build_type>ament_cmake</build_type>
