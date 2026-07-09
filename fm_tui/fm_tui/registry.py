@@ -382,11 +382,15 @@ _VISION_CAPTURE = replace(
     fields=_VISION_FIELDS + (Field("record", "Record dataset", "true", choices=("true", "false")),),
 )
 
+# fm_data's record.launch.py brings up the wrist cameras alongside the vision session, so
+# the fm_data path adds a wrist_cams field on top of the vision-capture fields. The public
+# _VISION_CAPTURE fallback stays camera-free — it has no camera launch to gate.
 _FM_DATA = LaunchSpec(
     package="fm_data",
     launch_file="record.launch.py",
     backend_arg="sim_backend",
-    fields=_VISION_CAPTURE.fields,
+    fields=_VISION_CAPTURE.fields
+    + (Field("wrist_cams", "Wrist Cameras", "on", choices=("on", "off")),),
 )
 
 
