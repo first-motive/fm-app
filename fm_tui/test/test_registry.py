@@ -76,7 +76,6 @@ def test_vision_is_wired_with_fields_and_openarm_only():
         "phone_ip",
         "rotate_deg",
         "tracking_mode",
-        "publish_debug_image",
         "gripper",
     ]
     # The camera picker is host_only: collected + persisted for the host relay
@@ -95,10 +94,9 @@ def test_vision_command_appends_only_launch_fields_after_backend():
         "mujoco",
         params={
             "camera": "phone",
-            "phone_ip": "192.168.1.207:8081",
+            "phone_ip": "192.168.1.207",
             "rotate_deg": "90",
             "tracking_mode": "hand",
-            "publish_debug_image": "true",
             "gripper": "off",
         },
     )
@@ -112,7 +110,6 @@ def test_vision_command_appends_only_launch_fields_after_backend():
         "sim_backend:=mujoco",
         "rotate_deg:=90",
         "tracking_mode:=hand",
-        "publish_debug_image:=true",
         "gripper:=off",
     ]
     # host_only picker fields never reach the launch argv (they drive the host relay).
@@ -124,10 +121,9 @@ def test_vision_command_uses_field_defaults_when_params_absent():
     spec = action("vision").launch
     cmd = spec.command("openarm", "right_arm", "mujoco")
     # Only the non-host_only fields fall back to defaults, in declaration order.
-    assert cmd[-4:] == [
+    assert cmd[-3:] == [
         "rotate_deg:=90",
         "tracking_mode:=hand",
-        "publish_debug_image:=true",
         "gripper:=off",
     ]
     # camera / phone_ip are host_only, so no camera token appears in the argv.
