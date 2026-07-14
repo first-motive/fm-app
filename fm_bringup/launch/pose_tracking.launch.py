@@ -63,11 +63,31 @@ def _launch_setup(context, *args, **kwargs):
         if moveit_servo.get("robot_link_command_frame") == default_ee:
             moveit_servo["robot_link_command_frame"] = ee_frame
 
+    # Per-arm overrides for the BIMANUAL mirror: a second pose_tracking_node servos the OTHER
+    # arm. Empty (single-arm) keeps servo.yaml. When set, this instance targets a different
+    # planning group / EE / controller, and runs under `arm_ns` so its target_pose + ~/status
+    # do not collide with the primary. pose_tracking pins robot_link_command_frame to the EE.
+    arm_ns = LaunchConfiguration("arm_ns").perform(context)
+    move_group = LaunchConfiguration("move_group").perform(context)
+    ov_command_frame = LaunchConfiguration("command_frame").perform(context)
+    ov_ee_frame = LaunchConfiguration("ee_frame").perform(context)
+    ov_command_out = LaunchConfiguration("command_out").perform(context)
+    if move_group:
+        moveit_servo["move_group_name"] = move_group
+    if ov_command_frame:
+        moveit_servo["planning_frame"] = ov_command_frame
+    if ov_ee_frame:
+        moveit_servo["ee_frame_name"] = ov_ee_frame
+        moveit_servo["robot_link_command_frame"] = ov_ee_frame   # pose tracking pins EE
+    if ov_command_out:
+        moveit_servo["command_out_topic"] = ov_command_out
+
     return [
         Node(
             package="fm_control",
             executable="pose_tracking_node",
             name="pose_tracking_node",
+            namespace=arm_ns or None,
             output="screen",
             parameters=[
                 {"moveit_servo": moveit_servo},
@@ -100,6 +120,18 @@ def generate_launch_description():
                 description="Preset; must match the running sim. Empty uses the "
                 "registry default.",
             ),
+            # Per-arm overrides for the bimanual mirror (a second, namespaced pose_tracking).
+            # All empty (default) -> single-arm behaviour straight from servo.yaml.
+            DeclareLaunchArgument("arm_ns", default_value="",
+                                  description="namespace for this arm's pose_tracking node"),
+            DeclareLaunchArgument("move_group", default_value="",
+                                  description="SRDF planning group (e.g. left_arm)"),
+            DeclareLaunchArgument("command_frame", default_value="",
+                                  description="Servo planning frame (arm base link)"),
+            DeclareLaunchArgument("ee_frame", default_value="",
+                                  description="arm tip link (Servo ee_frame_name + cmd frame)"),
+            DeclareLaunchArgument("command_out", default_value="",
+                                  description="this arm's joint_trajectory_controller topic"),
             OpaqueFunction(function=_launch_setup),
         ]
     )

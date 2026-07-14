@@ -225,13 +225,15 @@ class FmLauncherApp(App):
         if self._level == _ROBOT:
             return [_MenuItem(r.label, r) for r in self._source.robots]
         if self._level == _VARIANT:
-            return [
-                _MenuItem(
-                    v if v != self._robot.default_variant else f"{v}  (default)",
-                    v,
-                )
-                for v in self._robot.variants
-            ]
+            # Show the friendly label when the robot defines one; the dispatched value
+            # stays the raw variant key so ``variant:=<key>`` is unchanged.
+            items = []
+            for v in self._robot.variants:
+                text = self._robot.variant_labels.get(v, v)
+                if v == self._robot.default_variant:
+                    text = f"{text}  (default)"
+                items.append(_MenuItem(text, v))
+            return items
         # _BACKEND: first backend is the default.
         return [
             _MenuItem(

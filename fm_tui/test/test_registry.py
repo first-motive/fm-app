@@ -113,7 +113,7 @@ def test_vision_is_wired_with_fields_and_openarm_only():
     assert entry.has_backends
     assert entry.launch.has_fields
     assert {r.key for r in entry.robots} == {"openarm"}
-    assert entry.robots[0].variants == ("right_arm",)
+    assert entry.robots[0].variants == ("right_arm", "default_bimanual")
     assert set(entry.backends) >= {"mujoco", "mock"}
     names = [f.name for f in entry.launch.fields]
     assert names == [
@@ -121,6 +121,8 @@ def test_vision_is_wired_with_fields_and_openarm_only():
         "phone_ip",
         "rotate_deg",
         "tracking_mode",
+        "capture_hands",
+        "camera_input",
         "gripper",
     ]
     # The camera picker is host_only: collected + persisted for the host relay
@@ -129,6 +131,16 @@ def test_vision_is_wired_with_fields_and_openarm_only():
     # The phone IP is form-conditional: shown only when Camera == "phone".
     phone_ip = next(f for f in entry.launch.fields if f.name == "phone_ip")
     assert phone_ip.show_if == ("camera", "phone")
+
+
+def test_vision_openarm_variant_labels():
+    # The bimanual option is surfaced with a friendly menu label; the dispatched
+    # variant value stays the raw key (asserted in test_launcher).
+    robot = _mode("teleoperation", "vision_mirror").robots[0]
+    assert robot.variant_labels == {
+        "right_arm": "Right arm only",
+        "default_bimanual": "Both arms (bimanual)",
+    }
 
 
 def test_vision_command_appends_only_launch_fields_after_backend():
@@ -142,6 +154,8 @@ def test_vision_command_appends_only_launch_fields_after_backend():
             "phone_ip": "192.168.1.207",
             "rotate_deg": "90",
             "tracking_mode": "hand",
+            "capture_hands": "both",
+            "camera_input": "topic",
             "gripper": "off",
         },
     )
@@ -155,6 +169,8 @@ def test_vision_command_appends_only_launch_fields_after_backend():
         "sim_backend:=mujoco",
         "rotate_deg:=90",
         "tracking_mode:=hand",
+        "capture_hands:=both",
+        "camera_input:=topic",
         "gripper:=off",
     ]
     # host_only picker fields never reach the launch argv (they drive the host relay).
@@ -166,13 +182,16 @@ def test_vision_command_uses_field_defaults_when_params_absent():
     spec = _mode("teleoperation", "vision_mirror").launch
     cmd = spec.command("openarm", "right_arm", "mujoco")
     # Only the non-host_only fields fall back to defaults, in declaration order.
-    assert cmd[-3:] == [
+    assert cmd[-5:] == [
         "rotate_deg:=90",
         "tracking_mode:=hand",
+        "capture_hands:=right",
+        "camera_input:=device",
         "gripper:=off",
     ]
-    # camera / phone_ip are host_only, so no camera token appears in the argv.
-    assert not any("camera" in a for a in cmd)
+    # camera / phone_ip are host_only, so the picker never reaches the argv (camera_input
+    # is a separate real launch arg and IS expected).
+    assert not any(a.startswith(("camera:=", "phone_ip:=", "camera_source")) for a in cmd)
 
 
 def test_fieldless_command_appends_no_extra_args():
@@ -213,6 +232,17 @@ def test_robot_rejects_default_outside_variants():
     except ValueError:
         return
     raise AssertionError("expected ValueError for default outside variants")
+
+
+def test_robot_rejects_variant_label_for_unknown_variant():
+    try:
+        Robot(
+            key="x", label="X", variants=("a",), default_variant="a",
+            variant_labels={"nope": "Nope"},
+        )
+    except ValueError:
+        return
+    raise AssertionError("expected ValueError for variant_labels outside variants")
 
 
 def test_action_lookup_missing_raises():

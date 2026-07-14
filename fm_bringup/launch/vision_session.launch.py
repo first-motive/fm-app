@@ -26,6 +26,7 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
+    ExecuteProcess,
     IncludeLaunchDescription,
     OpaqueFunction,
     TimerAction,
@@ -39,7 +40,8 @@ from fm_bringup import registry
 
 # Launch args forwarded verbatim into teleop.launch.py's mirror branch. Empty values keep the
 # robot's vision.yaml / node defaults (teleop.launch.py only overrides when the arg is non-empty).
-_TELEOP_FORWARD = ("camera_source", "rotate_deg", "publish_debug_image", "tracking_mode", "hand_span_m")
+_TELEOP_FORWARD = ("camera_source", "rotate_deg", "publish_debug_image", "tracking_mode",
+                   "hand_span_m", "capture_hands", "record_skeleton", "camera_input")
 
 
 def _include(name, launch_arguments):
@@ -70,6 +72,9 @@ def _launch_setup(context, *args, **kwargs):
     if want_gripper and variant in ("", "right_arm"):
         variant = "right_arm_with_pinch_gripper"
     resolved_variant = variant or spec.default_variant
+    # Per-arm mirror config when the variant drives both arms (default_bimanual); None for
+    # single-arm. Drives the recorder joint prefixes, per-arm reset, and per-arm grippers below.
+    bimanual_arms = spec.mirror_arms.get(resolved_variant)
 
     # 1) Sim owns /robot_description, robot_state_publisher, foxglove_bridge and the controllers.
     sim = _include(
@@ -101,35 +106,64 @@ def _launch_setup(context, *args, **kwargs):
     # The recorder reads the actual EE via tf; point it at the variant's EE frame (the gripper
     # preset renames the flange) so ee_*/err_* columns are populated, not empty.
     dl_ee = spec.ee_frames.get(resolved_variant)
+    dl_args = ["--ee-frame", dl_ee] if dl_ee else []
+    # Bimanual capture records BOTH arms' joints (the data engine reads the named `joints`
+    # dict from the jsonl), so pass both arm prefixes.
+    if bimanual_arms:
+        dl_args += ["--arm-joint-prefix", "openarm_left_joint,openarm_right_joint"]
     datalogger = Node(
         package="fm_teleop_vision",
         executable="mirror_datalogger",
         name="mirror_datalogger",
         output="screen",
-        arguments=(["--ee-frame", dl_ee] if dl_ee else []),
+        arguments=dl_args,
         condition=IfCondition(LaunchConfiguration("record")),
     )
 
-    # 4) Reset/home node — RESET button publishes /vision/reset -> arm_reset disengages and
+    # 4) Reset/home node(s) — RESET button publishes /vision/reset -> arm_reset disengages and
     # servos the EE to its home pose via /target_pose (Servo owns the controller, so a
-    # joint_trajectory would be drowned by Servo's hold stream — see arm_reset.py). Source
-    # command_frame from servo.yaml (the Servo planning frame mirror_source stamps /target_pose
-    # in) so they never drift; the home EE pose is arm_reset's openarm default (FK of the URDF
-    # spawn joints).
-    reset_params = {}
-    try:
-        with open(spec.servo_params_file()) as servo_file:
-            servo_cfg = yaml.safe_load(servo_file)
-        reset_params["command_frame"] = servo_cfg["moveit_servo"]["robot_link_command_frame"]
-    except (OSError, KeyError, TypeError):
-        pass  # keep arm_reset's own default command frame + home pose
-    arm_reset = Node(
-        package="fm_teleop_vision",
-        executable="arm_reset",
-        name="arm_reset",
-        output="screen",
-        parameters=[reset_params] if reset_params else [],
-    )
+    # joint_trajectory would be drowned by Servo's hold stream — see arm_reset.py).
+    #
+    # Single-arm: source command_frame from servo.yaml (the Servo planning frame mirror_source
+    # stamps /target_pose in) so they never drift; the home EE pose is arm_reset's openarm
+    # default (FK of the URDF spawn joints).
+    #
+    # Bimanual: one arm_reset per arm, each targeting its namespaced /<ns>/target_pose in the
+    # arm's own base frame with the arm's home EE (from mirror_arms). Both share /vision/reset
+    # and /vision/engage, so a single RESET disengages and drives BOTH arms home.
+    if bimanual_arms:
+        reset_nodes = [
+            Node(
+                package="fm_teleop_vision",
+                executable="arm_reset",
+                name="arm_reset_%s" % arm["ns"],
+                output="screen",
+                parameters=[{
+                    "target_pose_topic": "/%s/target_pose" % arm["ns"],
+                    "command_frame": arm["command_frame"],
+                    "home_ee_position": list(arm["reset_home_ee"]["position"]),
+                    "home_ee_orientation": list(arm["reset_home_ee"]["orientation"]),
+                }],
+            )
+            for arm in bimanual_arms
+        ]
+    else:
+        reset_params = {}
+        try:
+            with open(spec.servo_params_file()) as servo_file:
+                servo_cfg = yaml.safe_load(servo_file)
+            reset_params["command_frame"] = servo_cfg["moveit_servo"]["robot_link_command_frame"]
+        except (OSError, KeyError, TypeError):
+            pass  # keep arm_reset's own default command frame + home pose
+        reset_nodes = [
+            Node(
+                package="fm_teleop_vision",
+                executable="arm_reset",
+                name="arm_reset",
+                output="screen",
+                parameters=[reset_params] if reset_params else [],
+            )
+        ]
 
     # 5) Capture browser — serves recorded sessions (index/detail) to the web GUI's
     # recordings viewer over the WS bridge. Always on (independent of record:=), so past
@@ -141,28 +175,63 @@ def _launch_setup(context, *args, **kwargs):
         output="screen",
     )
 
-    nodes = [sim, teleop, datalogger, arm_reset, capture_browser]
+    # Startup seed — on the mujoco backend each arm's ros2_control system spawns its own sim
+    # instance and the mirrored (left) arm's spawn initial_value does not reliably take, so it
+    # sags. Command both arm controllers to the ready pose once (a few times, ~5 s in, before
+    # teleop engages) so the arms hold symmetric. Sim only: NEVER on the real robot (it would
+    # move a physical arm at bringup); the real motors hold their pose without seeding.
+    seed_nodes = []
+    if bimanual_arms and sim_backend != "real":
+        seed_delay = max(4.0, teleop_delay - 4.0)
+        for arm in bimanual_arms:
+            rj = arm.get("ready_joints")
+            if not rj:
+                continue
+            names = ",".join("openarm_%s_joint%d" % (arm["ns"], j) for j in range(1, 8))
+            positions = ",".join(str(v) for v in rj)
+            msg = ("{joint_names: [%s], points: [{positions: [%s], "
+                   "time_from_start: {sec: 1}}]}" % (names, positions))
+            seed_nodes.append(ExecuteProcess(
+                cmd=["ros2", "topic", "pub", "-t", "4", "-r", "2",
+                     "/openarm_%s_arm_controller/joint_trajectory" % arm["ns"],
+                     "trajectory_msgs/msg/JointTrajectory", msg],
+                output="screen"))
+        if seed_nodes:
+            seed_nodes = [TimerAction(period=seed_delay, actions=seed_nodes)]
 
-    # 6) Gripper adapter — maps mirror_source's hand_preset (open|close) onto the gripper
-    # controller when gripper:=on and the robot defines a gripper spec. mirror_source already
-    # publishes the preset from the hand's finger curl; this node moves the pinchers.
-    if want_gripper and spec.gripper:
-        g = spec.gripper
-        nodes.append(
-            Node(
-                package="fm_teleop_device",
-                executable="gripper_teleop",
-                name="gripper_teleop",
-                output="screen",
-                parameters=[{
-                    "preset_topic": g["preset_topic"],
-                    "command_topic": g["command_topic"],
-                    "joints": list(g["joints"]),
-                    "open_positions": list(g["open"]),
-                    "close_positions": list(g["close"]),
-                }],
+    nodes = [sim, teleop, datalogger, *reset_nodes, *seed_nodes, capture_browser]
+
+    # 6) Gripper adapter(s) — map each hand's mirror_source hand_preset (open|close) onto its
+    # arm's gripper controller when gripper:=on. mirror_source already publishes the preset from
+    # the hand's finger curl; this node moves the pinchers. Bimanual launches one per arm (each
+    # hand drives its own pinchers, from mirror_arms); single-arm launches one from spec.gripper.
+    # Note: gripper:=on does NOT change a default_bimanual variant (it already carries both
+    # gripper controllers) — the variant upgrade above only fires for the single right_arm path.
+    if want_gripper:
+        if bimanual_arms:
+            grip_specs = [
+                (arm["ns"], arm["gripper"]) for arm in bimanual_arms if arm.get("gripper")
+            ]
+        elif spec.gripper:
+            grip_specs = [("right", spec.gripper)]
+        else:
+            grip_specs = []
+        for ns, g in grip_specs:
+            nodes.append(
+                Node(
+                    package="fm_teleop_device",
+                    executable="gripper_teleop",
+                    name="gripper_teleop_%s" % ns if bimanual_arms else "gripper_teleop",
+                    output="screen",
+                    parameters=[{
+                        "preset_topic": g["preset_topic"],
+                        "command_topic": g["command_topic"],
+                        "joints": list(g["joints"]),
+                        "open_positions": list(g["open"]),
+                        "close_positions": list(g["close"]),
+                    }],
+                )
             )
-        )
     return nodes
 
 
@@ -198,8 +267,9 @@ def generate_launch_description():
             DeclareLaunchArgument(
                 "rotate_deg",
                 default_value="",
-                description="CLOCKWISE de-rotation (0|90|180|270) for a sideways phone stream. "
-                "Empty keeps the vision.yaml default (90 for the validated iOS setup).",
+                description="CLOCKWISE de-rotation (0|90|180|270) for a sideways stream. "
+                "Empty keeps the vision.yaml default (0 for the Quest passthrough / webcam — "
+                "already upright landscape; the iOS phone in portrait needs 90).",
             ),
             DeclareLaunchArgument(
                 "publish_debug_image",
@@ -217,6 +287,24 @@ def generate_launch_description():
                 default_value="",
                 description="Operator reference segment (m) for the metric scale. Empty keeps "
                 "the vision.yaml / node default.",
+            ),
+            DeclareLaunchArgument(
+                "capture_hands",
+                default_value="right",
+                description="right (control hand only) or both (track both hands for the "
+                "dataset; the robot mirror still uses the right hand).",
+            ),
+            DeclareLaunchArgument(
+                "record_skeleton",
+                default_value="",
+                description="Publish + record the hand-skeleton stream (true|false). Empty "
+                "keeps the node default (on).",
+            ),
+            DeclareLaunchArgument(
+                "camera_input",
+                default_value="device",
+                description="device (hand_tracker opens camera_source) or topic (start the "
+                "fm_sensors head camera and track its ROS image stream — clean raw frames).",
             ),
             DeclareLaunchArgument(
                 "record",

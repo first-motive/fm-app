@@ -55,6 +55,51 @@ def test_srdf_selection():
     assert spec.moveit_srdf == "openarm_bimanual.srdf"
 
 
+def test_openarm_mirror_arms_left_geometry():
+    # The left arm's base frame is the right mirrored about the sagittal plane, so it
+    # carries its own workspace box (right Y range [-0.45, 0.30] -> [-0.30, 0.45]); the
+    # right inherits the vision.yaml defaults and defines no per-arm geometry.
+    right, left = registry.get("openarm").mirror_arms["default_bimanual"]
+    assert (right["ns"], left["ns"]) == ("right", "left")
+    assert left["workspace_min"][1] == -0.30
+    assert left["workspace_max"][1] == 0.45
+    assert left["axis_map_linear"] == ["z", "x", "-y"]
+    assert "workspace_min" not in right
+    assert "workspace_max" not in right
+
+
+def test_openarm_mirror_arms_grippers():
+    # Each hand drives its own arm's pinchers; the left mirrors the right prefix with an
+    # identical finger range (the reflect is on Y, the finger axis is X).
+    right, left = registry.get("openarm").mirror_arms["default_bimanual"]
+    assert right["gripper"] == {
+        "preset_topic": "/gripper_teleop/right/preset",
+        "command_topic": "/openarm_right_gripper_controller/joint_trajectory",
+        "joints": ["openarm_right_finger_joint1"],
+        "open": [-0.7854], "close": [0.0],
+    }
+    assert left["gripper"] == {
+        "preset_topic": "/gripper_teleop/left/preset",
+        "command_topic": "/openarm_left_gripper_controller/joint_trajectory",
+        "joints": ["openarm_left_finger_joint1"],
+        "open": [-0.7854], "close": [0.0],
+    }
+    # The preset the mirror_source publishes must match the gripper adapter's subscription.
+    assert right["gripper_preset"] == right["gripper"]["preset_topic"]
+    assert left["gripper_preset"] == left["gripper"]["preset_topic"]
+
+
+def test_openarm_mirror_arms_reset_home_ee():
+    # Reset drives each arm to its own home EE (the "hands forward" ready pose); the left
+    # position is the right with Y negated.
+    right, left = registry.get("openarm").mirror_arms["default_bimanual"]
+    assert right["reset_home_ee"]["position"] == [0.3399, -0.069, -0.12]
+    assert left["reset_home_ee"]["position"] == [0.3399, 0.069, -0.12]
+    assert left["command_frame"] == "openarm_left_base_link"
+    # 1:1 gain so hand spacing maps to gripper spacing.
+    assert right["mirror_gain"] == 1.0 and left["mirror_gain"] == 1.0
+
+
 def test_get_so101():
     spec = registry.get("so101")
     assert spec.key == "so101"
