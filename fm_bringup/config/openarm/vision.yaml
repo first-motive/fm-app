@@ -6,11 +6,15 @@
 
 hand_tracker:
   ros__parameters:
-    # Phone IP-webcam streams are often sideways: validate with publish_debug_image:=true,
-    # save a /vision/image frame, and set the CLOCKWISE de-rotation here (0|90|180|270).
-    # Read once at startup — not live-tunable; relaunch after changing.
-    # 90 validated 2026-06-12 against IP Camera Lite (iOS, portrait) — frame upright.
-    rotate_deg: 90
+    # De-rotate the camera to upright BEFORE MediaPipe (0|90|180|270, CLOCKWISE) so image
+    # x/y — and therefore the teleop control axes — match the operator's real left/right and
+    # up/down. Read once at startup — not live-tunable; relaunch after changing. Applying the
+    # WRONG value both tilts the view AND swaps the control axes (hand left/right -> arm
+    # up/down), because the rotation happens before the landmarks are read.
+    #   Quest 3 passthrough (current source) & USB webcam: 0 — the stream is already upright
+    #     landscape (320x240). Verified 2026-07-14 against the live Quest relay.
+    #   Phone IP Camera Lite (iOS, portrait): 90 — pass rotate_deg:=90 at launch to override.
+    rotate_deg: 0
     publish_debug_image: false
     # hand (default): 21-landmark Hand Landmarker + grip from finger curl.
     # full_body: 33-joint Pose Landmarker; the body_side wrist drives the arm (no grip),
@@ -60,4 +64,4 @@ mirror_source:
     # DEBUG-SESSION FLAG: publish the full per-tick mapping internals on /vision/mirror_debug
     # so the mirror_datalogger dbg_* columns fill (pre-clamp target, per-axis scale, overflow).
     # Tiny msg/tick; set back to false once the tracking debug is done.
-    publish_debug: true
+    publish_debug: false
