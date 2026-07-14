@@ -128,12 +128,21 @@ class Robot:
     label: str
     variants: tuple[str, ...]
     default_variant: str
+    # Optional friendly display names for the variant menu (raw variant key -> label).
+    # The dispatched ``variant:=<key>`` value is always the raw key; only the menu text
+    # changes. Missing keys fall back to the raw variant string.
+    variant_labels: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.default_variant not in self.variants:
             raise ValueError(
                 f"{self.key}: default_variant {self.default_variant!r} "
                 f"not in variants {self.variants}"
+            )
+        unknown = set(self.variant_labels) - set(self.variants)
+        if unknown:
+            raise ValueError(
+                f"{self.key}: variant_labels for unknown variants {sorted(unknown)}"
             )
 
 
@@ -306,9 +315,13 @@ _VISION_FIELDS = (
     ),
     Field("rotate_deg", "Rotate clockwise (0/90/180/270)", "90"),
     Field("tracking_mode", "Tracking mode", "hand", choices=("hand", "full_body")),
-    # publish_debug_image is intentionally not a form field: /vision/image (the skeleton
-    # overlay the Foxglove/web viewers read) is always on for this session. vision_session
-    # defaults the launch arg to true, so omitting it here keeps it published.
+    # Dataset capture: track both hands (control still uses the right hand) and take frames
+    # from the fm_sensors head-camera ROS topic (clean raw frames) vs opening the URL directly.
+    Field("capture_hands", "Capture hands", "right", choices=("right", "both")),
+    Field("camera_input", "Camera input", "device", choices=("device", "topic")),
+    # publish_debug_image and record_skeleton are intentionally not form fields: /vision/image
+    # (the overlay the viewers read) and the skeleton stream are always on for this session.
+    # vision_session defaults their launch args, so omitting them here keeps them published.
     # Run the arm with the pinch gripper (hand open/close drives the pinchers) or without it.
     Field("gripper", "Gripper (pinchers)", "off", choices=("on", "off")),
 )
@@ -322,8 +335,14 @@ _VISION_ROBOTS = (
     Robot(
         key="openarm",
         label="Enactic OpenArm",
-        variants=("right_arm",),
+        # default_bimanual mirrors BOTH hands onto BOTH arms (one mirror_source + pose_tracking
+        # per arm); right_arm is the single-arm path.
+        variants=("right_arm", "default_bimanual"),
         default_variant="right_arm",
+        variant_labels={
+            "right_arm": "Right arm only",
+            "default_bimanual": "Both arms (bimanual)",
+        },
     ),
 )
 # macOS daily driver is mujoco; mock is the no-sim fallback. gazebo/isaac are Linux/GPU.

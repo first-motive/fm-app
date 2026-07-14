@@ -29,6 +29,59 @@ async def _walk_to_vision_form(pilot):
     await pilot.pause()
 
 
+def test_variant_menu_shows_friendly_labels(monkeypatch, tmp_path):
+    # The bimanual option reads as "Both arms (bimanual)", not the raw default_bimanual key.
+    monkeypatch.setenv("FM_TUI_CONFIG", str(tmp_path / "cfg.json"))
+
+    async def go():
+        async with FmLauncherApp().run_test() as pilot:
+            await pilot.pause()
+            menu = pilot.app.query_one("#menu", ListView)
+            menu.index = [a.key for a in actions()].index("teleoperation")
+            await pilot.press("enter")  # action -> mode (Vision Mirror, first)
+            await pilot.press("enter")  # mode -> robot (openarm, only one)
+            await pilot.press("enter")  # robot -> variant
+            await pilot.pause()
+            items = list(menu.children)
+            assert [it._text for it in items] == [
+                "Right arm only  (default)",
+                "Both arms (bimanual)",
+            ]
+            # The dispatched value stays the raw variant key.
+            assert [it.value for it in items] == ["right_arm", "default_bimanual"]
+
+    asyncio.run(go())
+
+
+def test_vision_form_dispatches_bimanual_variant(monkeypatch, tmp_path):
+    # Selecting "Both arms" dispatches the raw variant key, not the friendly label.
+    monkeypatch.setenv("FM_TUI_CONFIG", str(tmp_path / "cfg.json"))
+
+    async def go():
+        async with FmLauncherApp().run_test() as pilot:
+            await pilot.pause()
+            menu = pilot.app.query_one("#menu", ListView)
+            menu.index = [a.key for a in actions()].index("teleoperation")
+            await pilot.press("enter")  # action -> mode (Vision Mirror, first)
+            await pilot.press("enter")  # mode -> robot
+            await pilot.press("enter")  # robot -> variant
+            await pilot.pause()
+            menu.index = 1  # Both arms (bimanual)
+            await pilot.press("enter")  # variant -> backend (mujoco default)
+            await pilot.press("enter")  # backend -> params form
+            await pilot.pause()
+            # Mac camera needs no IP, so the form can submit immediately.
+            pilot.app.query_one("#field-camera", Select).value = "mac"
+            await pilot.pause()
+            pilot.app.set_focus(pilot.app.query_one("#form-launch", Button))
+            await pilot.press("enter")  # dispatch + exit
+            await pilot.pause()
+        assert "robot:=openarm" in pilot.app.return_value
+        assert "variant:=default_bimanual" in pilot.app.return_value
+
+    asyncio.run(go())
+
+
 def test_menu_builds_from_registry():
     async def go():
         async with FmLauncherApp().run_test() as pilot:
@@ -125,6 +178,8 @@ def test_vision_form_dispatches_mac_needs_no_ip(monkeypatch, tmp_path):
             "sim_backend:=mujoco",
             "rotate_deg:=90",
             "tracking_mode:=hand",
+            "capture_hands:=right",
+            "camera_input:=device",
             "gripper:=off",
         ]
         # The choice is persisted for the host camera manager.
@@ -155,7 +210,8 @@ def test_vision_form_phone_requires_ip_then_persists(monkeypatch, tmp_path):
             await pilot.press("enter")
             await pilot.pause()
         assert pilot.app.return_value is not None
-        assert not any("camera" in a for a in pilot.app.return_value)
+        # host_only camera picker never reaches the argv (camera_input is a real arg).
+        assert not any(a.startswith(("camera:=", "phone_ip:=")) for a in pilot.app.return_value)
         # Persisted for the host relay manager, IP included for next-run prefill.
         assert config.get_camera() == {
             "camera": "phone",

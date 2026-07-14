@@ -50,26 +50,42 @@ def _launch_setup(context, *args, **kwargs):
             f"Unknown input '{teleop_input}'. One of: {', '.join(_VALID_INPUTS)}."
         )
 
+    # Bimanual mirror: the variant carries both arms and the registry declares a per-arm mirror
+    # config, so both hands drive both arms — one namespaced pose_tracking + mirror_source per
+    # arm. Any other case is single-arm and unchanged.
+    spec_top = registry.get(robot)
+    bimanual_arms = spec_top.mirror_arms.get(variant) if teleop_input == "mirror" else None
+
+    def _pose_tracking(extra_args=None):
+        args = {"robot": robot, "sim_backend": sim_backend, "variant": variant}
+        args.update(extra_args or {})
+        return IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(os.path.join(
+                get_package_share_directory("fm_bringup"), "launch", "pose_tracking.launch.py")),
+            launch_arguments=args.items(),
+        )
+
     # mirror drives an ABSOLUTE EE pose target (1:1 hand mirroring), so it runs the
     # PoseTracking node — which embeds its own Servo — INSTEAD of servo_node. Every other
     # input jogs via servo_node. Exactly one of the two owns the arm's JTC at a time.
-    servo_launch = "pose_tracking.launch.py" if teleop_input == "mirror" else "servo.launch.py"
-    nodes = [
-        IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(
-                os.path.join(
-                    get_package_share_directory("fm_bringup"),
-                    "launch",
-                    servo_launch,
-                )
-            ),
-            launch_arguments={
-                "robot": robot,
-                "sim_backend": sim_backend,
-                "variant": variant,
-            }.items(),
-        )
-    ]
+    if bimanual_arms:
+        nodes = [_pose_tracking({
+            "arm_ns": arm["ns"], "move_group": arm["move_group"],
+            "command_frame": arm["command_frame"], "ee_frame": arm["ee_frame"],
+            "command_out": arm["command_out"],
+        }) for arm in bimanual_arms]
+    elif teleop_input == "mirror":
+        nodes = [_pose_tracking()]
+    else:
+        nodes = [
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(os.path.join(
+                    get_package_share_directory("fm_bringup"), "launch", "servo.launch.py")),
+                launch_arguments={
+                    "robot": robot, "sim_backend": sim_backend, "variant": variant,
+                }.items(),
+            )
+        ]
 
     if teleop_input == "joy":
         nodes += [
@@ -140,6 +156,32 @@ def _launch_setup(context, *args, **kwargs):
         # hand_tracker resolves its model (hand vs pose) from the package share dir by
         # tracking_mode, so model_path is NOT forced here (unlike the vision wrist path).
 
+        # Dataset capture knobs: track BOTH hands (control still uses one), publish+record
+        # the hand-skeleton stream, and optionally take frames from a ROS camera topic (the
+        # fm_sensors head-cam) so the recorded frames are exactly the tracked frames.
+        camera_nodes = []
+        if bimanual_arms or LaunchConfiguration("capture_hands").perform(context) == "both":
+            tracker_overrides["num_hands"] = 2   # bimanual control needs both hands tracked
+        record_skeleton = LaunchConfiguration("record_skeleton").perform(context)
+        if record_skeleton:
+            tracker_overrides["publish_skeleton"] = record_skeleton.lower() in ("true", "1", "yes")
+        if LaunchConfiguration("camera_input").perform(context) == "topic":
+            tracker_overrides["input_mode"] = "topic"
+            camera_nodes.append(
+                Node(
+                    package="fm_sensors",
+                    executable="camera_node",
+                    name="head_camera",
+                    output="screen",
+                    parameters=[{
+                        "camera_source": camera_source,
+                        "frame_id": "head_cam",
+                        "image_topic": "head_cam/image_raw",
+                        "info_topic": "head_cam/camera_info",
+                    }],
+                )
+            )
+
         # mirror_source: stamp the target in the robot's Servo command frame (read from the
         # same servo.yaml Servo loads, so they never drift), plus the metric-scale knob.
         source_overrides = {}
@@ -168,22 +210,50 @@ def _launch_setup(context, *args, **kwargs):
             # full_body sizes depth by the FOREARM (elbow->wrist), not the hand span.
             source_overrides["hand_span_m"] = 0.26
 
-        nodes += [
-            Node(
-                package="fm_teleop_vision",
-                executable="hand_tracker",
-                name="hand_tracker",
-                output="screen",
-                parameters=base_params + [tracker_overrides],
-            ),
-            Node(
-                package="fm_teleop_vision",
-                executable="mirror_source",
-                name="mirror_source",
-                output="screen",
-                parameters=base_params + [source_overrides],
-            ),
-        ]
+        hand_tracker_node = Node(
+            package="fm_teleop_vision",
+            executable="hand_tracker",
+            name="hand_tracker",
+            output="screen",
+            parameters=base_params + [tracker_overrides],
+        )
+        if bimanual_arms:
+            # One tracker (both hands) feeds one mirror_source per arm, each reading its hand's
+            # pose stream and driving its arm's namespaced pose_tracking + gripper.
+            mirror_nodes = []
+            for arm in bimanual_arms:
+                per_arm = dict(source_overrides)
+                per_arm.update({
+                    "command_frame": arm["command_frame"],
+                    "ee_frame": arm["ee_frame"],
+                    "target_pose_topic": "/%s/target_pose" % arm["ns"],
+                    "hand_pose_topic": "vision/%s/hand_pose" % arm["hand"],
+                    "grip_topic": "vision/%s/grip" % arm["hand"],
+                    "tracking_topic": "vision/%s/tracking_active" % arm["hand"],
+                    "gripper_preset_topic": arm["gripper_preset"],
+                })
+                # Per-arm overrides (left's mirrored workspace box + axis-map; both arms'
+                # mirror_gain); appended after base_params so they override the vision.yaml
+                # defaults tuned for the single right arm.
+                for key in ("workspace_min", "workspace_max", "axis_map_linear", "mirror_gain"):
+                    if key in arm:
+                        per_arm[key] = arm[key]
+                mirror_nodes.append(Node(
+                    package="fm_teleop_vision", executable="mirror_source",
+                    name="mirror_source_%s" % arm["ns"], output="screen",
+                    parameters=base_params + [per_arm]))
+            nodes += camera_nodes + [hand_tracker_node] + mirror_nodes
+        else:
+            nodes += camera_nodes + [
+                hand_tracker_node,
+                Node(
+                    package="fm_teleop_vision",
+                    executable="mirror_source",
+                    name="mirror_source",
+                    output="screen",
+                    parameters=base_params + [source_overrides],
+                ),
+            ]
     # foxglove: the browser panel is the publisher; no ROS-side input node.
 
     # Robot-specific teleop adapters (e.g. the G1-D hand teleop, which maps the panel's
@@ -276,6 +346,24 @@ def generate_launch_description():
                 description="mirror input only: operator's reference segment in metres for "
                 "the metric scale (wrist->knuckle ~0.09 hand, forearm ~0.26 full_body). "
                 "Empty keeps the vision.yaml / node default.",
+            ),
+            DeclareLaunchArgument(
+                "capture_hands",
+                default_value="right",
+                description="mirror input only: right (control hand only) or both (track "
+                "both hands for the dataset; control still uses the right hand).",
+            ),
+            DeclareLaunchArgument(
+                "record_skeleton",
+                default_value="",
+                description="mirror input only: publish + record the hand-skeleton stream "
+                "(true|false). Empty keeps the node default (on).",
+            ),
+            DeclareLaunchArgument(
+                "camera_input",
+                default_value="device",
+                description="mirror input only: device (hand_tracker opens camera_source) or "
+                "topic (start the fm_sensors head camera and track its ROS image stream).",
             ),
             OpaqueFunction(function=_launch_setup),
         ]

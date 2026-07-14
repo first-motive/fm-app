@@ -143,6 +143,19 @@ class RobotSpec:
     # Empty -> keep servo.yaml / node defaults. variant -> frame id.
     ee_frames: dict = field(default_factory=dict)
 
+    # Per-arm config for the BIMANUAL vision mirror (both hands -> both arms). Empty for
+    # single-arm robots. Each entry drives one hand's pose stream to one arm through its own
+    # mirror_source + pose_tracking_node instance, namespaced by `ns` so their /target_pose,
+    # ~/status etc. never collide. Keyed to a variant that carries both arms' controllers.
+    #   ns             topic namespace for the arm's pose_tracking (-> /<ns>/target_pose)
+    #   hand           which tracked hand drives it ("left" | "right")
+    #   command_frame  Servo planning frame = tf frame the EE is read in
+    #   ee_frame       the arm tip link (mirror anchor + Servo ee_frame_name)
+    #   move_group     SRDF planning group for this arm
+    #   command_out    the arm's joint_trajectory_controller topic
+    #   gripper_preset the arm's gripper preset topic (hand open/close)
+    mirror_arms: dict = field(default_factory=dict)  # variant -> tuple(dict per arm)
+
     # --- path helpers --------------------------------------------------------
 
     def _config(self, *parts):
@@ -273,6 +286,12 @@ _ROBOTS = {
         home_positions={
             "right_arm": [0.0, 0.5, 0.0, 1.2, 0.0, 0.3, 0.0],
             "right_arm_with_pinch_gripper": [0.0, 0.5, 0.0, 1.2, 0.0, 0.3, 0.0],
+            # "Hands forward, ~20cm apart" bimanual ready pose; left (first, per preset order)
+            # is the right mirrored about the sagittal plane. Mirrors the URDF spawn
+            # (openarm.sim.urdf.xacro ready_bimanual). Dead field — nothing reads
+            # home_positions; kept in sync with the URDF for reference.
+            "default_bimanual": [-0.6816, -0.0265, 0.3161, 1.1622, 0.0, -0.3, 0.0]
+            + [0.6816, 0.0265, -0.3161, 1.1622, 0.0, 0.3, 0.0],
         },
         # Pinch gripper: hand open/close -> finger_joint1 position. Right finger range is
         # [-0.7854, 0]; live testing showed the physical open/close is inverted from the joint
@@ -289,6 +308,69 @@ _ROBOTS = {
         ee_frames={
             "right_arm": "openarm_right_link7",
             "right_arm_with_pinch_gripper": "openarm_right_ee_base_link",
+            # Bimanual arms carry the pinch gripper, so the tip is ee_base_link (link7 is the
+            # bare flange and is NOT emitted by the default_bimanual preset — the model ends at
+            # link6 + ee_base_link, same as right_arm_with_pinch_gripper).
+            "default_bimanual": "openarm_right_ee_base_link",   # right is the primary servo tip
+        },
+        # Bimanual mirror: right hand -> right arm, left hand -> left arm. Each arm gets its
+        # own namespaced pose_tracking + a mirror_source. left_arm is the vendored SRDF's
+        # second planning group (mirror of right_arm). Each entry also carries the arm's
+        # gripper spec (per-hand pinchers), reset home EE pose, and — for the left, whose
+        # base frame is the right mirrored about the sagittal (XZ) plane — its own workspace
+        # box + axis-map so it does not inherit the right-tuned values from vision.yaml.
+        mirror_arms={
+            "default_bimanual": (
+                {"ns": "right", "hand": "right",
+                 "command_frame": "openarm_right_base_link", "ee_frame": "openarm_right_ee_base_link",
+                 "move_group": "right_arm",
+                 "command_out": "/openarm_right_arm_controller/joint_trajectory",
+                 "gripper_preset": "/gripper_teleop/right/preset",
+                 # Startup seed = the URDF ready pose. On mujoco each arm's ros2_control system
+                 # spawns its own sim instance and the mirrored (left) arm's initial_value does
+                 # not always take, so it sags; seeding both arm controllers once at bringup
+                 # holds them at the symmetric ready pose (see vision_session seed_ready).
+                 "ready_joints": [0.6816, 0.0265, -0.3161, 1.1622, 0.0, 0.3, 0.0],
+                 # 1:1 (not vision.yaml's 0.75) so hands-together maps to grippers-together.
+                 "mirror_gain": 1.0,
+                 "gripper": {
+                     "preset_topic": "/gripper_teleop/right/preset",
+                     "command_topic": "/openarm_right_gripper_controller/joint_trajectory",
+                     "joints": ["openarm_right_finger_joint1"],
+                     "open": [-0.7854], "close": [0.0],
+                 },
+                 # EE of the "hands forward, ~20cm apart" bimanual ready pose (base frame),
+                 # matching the URDF spawn (openarm.sim.urdf.xacro ready_bimanual).
+                 "reset_home_ee": {
+                     "position": [0.3399, -0.069, -0.12],
+                     "orientation": [0.0012, -0.6872, 0.1579, 0.709],
+                 }},
+                {"ns": "left", "hand": "left",
+                 "command_frame": "openarm_left_base_link", "ee_frame": "openarm_left_ee_base_link",
+                 "move_group": "left_arm",
+                 "command_out": "/openarm_left_arm_controller/joint_trajectory",
+                 "gripper_preset": "/gripper_teleop/left/preset",
+                 "ready_joints": [-0.6816, -0.0265, 0.3161, 1.1622, 0.0, -0.3, 0.0],
+                 "mirror_gain": 1.0,
+                 # Right Y range [-0.45, 0.30] mirrors to [-0.30, 0.45]; X/Z unchanged.
+                 # Tune the face magnitudes / axis-map signs live if the left clamps or
+                 # feels axis-inverted (mapping is otherwise identical to the right).
+                 "workspace_min": [-0.10, -0.30, -0.55],
+                 "workspace_max": [0.55, 0.45, 0.25],
+                 "axis_map_linear": ["z", "x", "-y"],
+                 # Left finger axis is X, the reflect is on Y -> range unchanged from right.
+                 "gripper": {
+                     "preset_topic": "/gripper_teleop/left/preset",
+                     "command_topic": "/openarm_left_gripper_controller/joint_trajectory",
+                     "joints": ["openarm_left_finger_joint1"],
+                     "open": [-0.7854], "close": [0.0],
+                 },
+                 # Sagittal mirror of the right reset home (Y negated; quat x,z negated).
+                 "reset_home_ee": {
+                     "position": [0.3399, 0.069, -0.12],
+                     "orientation": [-0.0012, -0.6872, -0.1579, 0.709],
+                 }},
+            ),
         },
     ),
     "so101": RobotSpec(
