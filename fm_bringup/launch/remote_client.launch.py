@@ -19,9 +19,9 @@ locally; here the tracker lives on the rig and only tiny pose messages cross the
 The Mac must be joined to the rig's DDS graph (native pixi + ``scripts/run/dds-lan.sh``;
 ``./run.sh --native`` does this) so the ``/vision/*`` topics actually arrive. Single-arm
 (openarm ``right_arm``) — the rig tracks one hand. Recording lives rig-side (the TUI's Record
-action publishes ``/capture/record``), so there is no local datalogger here. The mono
-``/vision/hand_pose`` drives the mirror today; feeding the rig's metric depth-Z
-(``/vision/hand_point``) is a follow-up in ``mirror_source`` (a ``metric`` input mode).
+action publishes ``/capture/record``), so there is no local datalogger here. By default
+(``depth:=on``) the mirror is driven by the rig's **metric depth-Z** (``/vision/hand_point``) via
+mirror_source's ``metric`` input mode; ``depth:=off`` falls back to the mono ``/vision/hand_pose``.
 """
 
 import os
@@ -108,6 +108,15 @@ def _launch_setup(context, *args, **kwargs):
     ee_frame = spec.ee_frames.get(resolved_variant)
     if ee_frame:
         source_overrides["ee_frame"] = ee_frame
+    # Depth-Z: drive the mirror from the rig's REAL metric depth (/vision/hand_point) instead of
+    # the mono apparent-size z. Needs mirror_source's metric input mode (fm-teleop). depth:=off
+    # falls back to the mono /vision/hand_pose (no mirror_source change needed). The metric depth
+    # axis is enabled here (axis_gain[2]=1); its sign is camera-optical-frame specific — tune on
+    # the rig and persist in vision.yaml.
+    if LaunchConfiguration("depth").perform(context).strip().lower() in ("on", "true", "1", "yes"):
+        source_overrides["input_mode"] = "metric"
+        source_overrides["hand_point_topic"] = "/vision/hand_point"
+        source_overrides["axis_gain"] = [1.0, 1.0, 1.0]
     mirror_source = Node(
         package="fm_teleop_vision",
         executable="mirror_source",
@@ -165,6 +174,12 @@ def generate_launch_description():
                 default_value="12.0",
                 description="Seconds to hold pose_tracking back so the sim comes up first "
                 "(pose_tracking_node FATAL-exits without a robot state within ~10 s).",
+            ),
+            DeclareLaunchArgument(
+                "depth",
+                default_value="on",
+                description="on|off — drive the mirror from the rig's metric depth-Z "
+                "(/vision/hand_point). off falls back to the mono /vision/hand_pose.",
             ),
             OpaqueFunction(function=_launch_setup),
         ]
