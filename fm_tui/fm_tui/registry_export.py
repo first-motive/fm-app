@@ -29,14 +29,16 @@ import json
 import sys
 
 from fm_tui import config
-from fm_tui.registry import Action, Field, LaunchSpec, Mode, actions
+from fm_tui.registry import Action, Field, LaunchSpec, Mode, PubSpec, actions
 
 # Bump on any breaking shape change to the exported document. Readers pin the
 # major they understand and refuse anything newer.
 #   2  added the optional per-action `modes` level (action -> mode -> robot -> …).
 #   3  added each launch's form `fields` (so a front end can build the parameter
 #      form — camera, rotate_deg, gripper, …) and each robot's `variant_labels`.
-SCHEMA_VERSION = 3
+#   4  added the optional per-action `pub` (a non-launch control action that
+#      publishes a one-shot topic — Record toggles /capture/record on the rig).
+SCHEMA_VERSION = 4
 
 
 def _field_to_dict(field_spec: Field) -> dict:
@@ -51,6 +53,17 @@ def _field_to_dict(field_spec: Field) -> dict:
         "choices": list(field_spec.choices),
         "host_only": field_spec.host_only,
         "show_if": list(field_spec.show_if),  # [] = always shown; else [ctrl, value]
+    }
+
+
+def _pub_to_dict(pub: PubSpec) -> dict:
+    """Serialise a pub spec — the topic, message type, and labelled payloads a non-launch
+    control action publishes. A front end rebuilds the ``ros2 topic pub`` argv from these
+    exactly as :meth:`PubSpec.command` does (``--times 3 --rate 5``, ``{data: <value>}``)."""
+    return {
+        "topic": pub.topic,
+        "msg_type": pub.msg_type,
+        "options": [[label, value] for label, value in pub.options],
     }
 
 
@@ -108,6 +121,7 @@ def _action_to_dict(action: Action) -> dict:
         "robots": _robots_to_list(action.robots),
         "backends": list(action.backends),
         "modes": [_mode_to_dict(mode) for mode in action.modes],
+        "pub": _pub_to_dict(action.pub) if action.pub else None,
     }
 
 

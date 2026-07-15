@@ -51,13 +51,14 @@ from fm_tui.registry import Action, Mode, Robot, actions
 # step after the action; the chosen mode then supplies robots/backends/launch. Wired
 # sim/backend actions add a backend step after the variant; robot_description dispatches
 # straight from the variant. Fielded specs (vision) add a params form before dispatching.
-_ACTION, _MODE, _ROBOT, _VARIANT, _BACKEND, _PARAMS = (
+_ACTION, _MODE, _ROBOT, _VARIANT, _BACKEND, _PARAMS, _PUB = (
     "action",
     "mode",
     "robot",
     "variant",
     "backend",
     "params",
+    "pub",
 )
 
 
@@ -213,15 +214,22 @@ class FmLauncherApp(App):
 
     def _items_for_level(self) -> list[_MenuItem]:
         if self._level == _ACTION:
-            # A mode group (teleoperation) dispatches through its modes, so it is not a
-            # stub even though its own launch is None. Stubs read as disabled from the
-            # grey styling alone — no "(not yet wired)" suffix needed.
+            # A mode group (teleoperation) dispatches through its modes and a control
+            # action (Record) publishes a topic, so neither is a stub even though its own
+            # launch is None. Stubs read as disabled from the grey styling alone — no
+            # "(not yet wired)" suffix needed.
             return [
-                _MenuItem(a.label, a, stub=not a.wired and not a.has_modes)
+                _MenuItem(a.label, a, stub=not a.wired and not a.has_modes and not a.is_pub)
                 for a in actions()
             ]
         if self._level == _MODE:
             return [_MenuItem(m.label, m, stub=not m.wired) for m in self._action.modes]
+        if self._level == _PUB:
+            # A control action lists its labelled payloads (Start/Stop); selecting one
+            # dispatches a one-shot ros2 topic pub.
+            return [
+                _MenuItem(label, payload) for label, payload in self._action.pub.options
+            ]
         if self._level == _ROBOT:
             return [_MenuItem(r.label, r) for r in self._source.robots]
         if self._level == _VARIANT:
@@ -274,6 +282,8 @@ class FmLauncherApp(App):
             self._select_action(value)
         elif self._level == _MODE:
             self._select_mode(value)
+        elif self._level == _PUB:
+            self._dispatch_pub(value)
         elif self._level == _ROBOT:
             self._robot = value
             self._level = _VARIANT
@@ -302,6 +312,12 @@ class FmLauncherApp(App):
         if act.has_modes:
             self._action = act
             self._level = _MODE
+            self._rebuild()
+            return
+        # A control action (Record) opens its option step (Start/Stop) — no launch, no robot.
+        if act.is_pub:
+            self._action = act
+            self._level = _PUB
             self._rebuild()
             return
         if not act.wired:
@@ -345,6 +361,9 @@ class FmLauncherApp(App):
                 self._level = _ACTION
                 self._action = None
         elif self._level == _MODE:
+            self._level = _ACTION
+            self._action = None
+        elif self._level == _PUB:
             self._level = _ACTION
             self._action = None
         else:
@@ -510,6 +529,11 @@ class FmLauncherApp(App):
                 self._robot.key, variant, backend, params, viewer=self._viewer
             )
         )
+
+    def _dispatch_pub(self, value: str) -> None:
+        """Exit with the one-shot ``ros2 topic pub`` argv for the chosen option; :func:`main`
+        runs it post-teardown, the same path a launch dispatch takes."""
+        self.exit(self._action.pub.command(value))
 
 
 def main() -> None:

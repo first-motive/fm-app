@@ -73,6 +73,29 @@ def test_data_capture_is_wired_and_records():
     assert "record:=true" in cmd
 
 
+def test_record_is_a_pub_action():
+    entry = action("record")
+    # A control action: no launch, no robots — it publishes a topic to the rig recorder.
+    assert entry.is_pub
+    assert not entry.wired
+    assert entry.launch is None
+    assert entry.robots == ()
+    assert entry.pub.topic == "/capture/record"
+    assert entry.pub.msg_type == "std_msgs/msg/Bool"
+    assert entry.pub.options == (("Start", "true"), ("Stop", "false"))
+
+
+def test_pub_command_builds_topic_pub_argv():
+    pub = action("record").pub
+    # --times 3 --rate 5 (idempotent Bool) rather than --once, so a discovery-race
+    # drop still lands without double-triggering a take.
+    assert pub.command("true") == [
+        "ros2", "topic", "pub", "--times", "3", "--rate", "5",
+        "/capture/record", "std_msgs/msg/Bool", "{data: true}",
+    ]
+    assert pub.command("false")[-1] == "{data: false}"
+
+
 def test_every_robot_default_is_a_listed_variant():
     def robots_of(entry):
         yield from entry.robots

@@ -121,6 +121,46 @@ class LaunchSpec:
 
 
 @dataclass(frozen=True)
+class PubSpec:
+    """How a non-launch 'control' action publishes a one-shot ROS topic message.
+
+    Some actions do not launch anything — they poke a node already running on the
+    network. Record toggles ``/capture/record`` on the remote recorder rig (the rig
+    runs the camera + recorder headless; the TUI just starts/stops an episode). Instead
+    of a :class:`LaunchSpec`, such an action carries a ``PubSpec``: a topic, a message
+    type, and labelled payloads (Start/Stop). The launcher lists the options, then
+    dispatches a one-shot ``ros2 topic pub`` — reusing the same exit-with-argv +
+    ``subprocess.run`` path a launch uses. Reaching the rig relies on the launcher's
+    env being joined to the rig's DDS graph (native pixi + ``dds-lan.sh``).
+    """
+
+    topic: str
+    msg_type: str = "std_msgs/msg/Bool"
+    # (menu label, message payload) pairs in display order. Default = a Bool REC/STOP toggle.
+    options: tuple[tuple[str, str], ...] = (("Start", "true"), ("Stop", "false"))
+
+    def command(self, value: str) -> list[str]:
+        """Build the one-shot ``ros2 topic pub`` argv for one option's payload.
+
+        ``--times 3 --rate 5`` (not ``--once``) so a datagram lost to a discovery race
+        still lands: the recorder's Bool handler is idempotent — a repeated ``true``
+        while recording (or ``false`` while idle) is a no-op — so publishing three times
+        never double-triggers a take."""
+        return [
+            "ros2",
+            "topic",
+            "pub",
+            "--times",
+            "3",
+            "--rate",
+            "5",
+            self.topic,
+            self.msg_type,
+            "{data: %s}" % value,
+        ]
+
+
+@dataclass(frozen=True)
 class Robot:
     """A robot a wired action can target, with its selectable variants."""
 
@@ -188,6 +228,10 @@ class Action:
     # Optional mode level (action -> mode -> robot -> …). When set, the action is a group:
     # it carries no launch/robots of its own and the launcher inserts a mode-selection step.
     modes: tuple[Mode, ...] = field(default_factory=tuple)
+    # A non-launch 'control' action publishes a one-shot topic instead of launching
+    # (Record toggles /capture/record on the remote recorder rig). Carries a PubSpec
+    # instead of a launch/robots; the launcher lists its options and dispatches a pub.
+    pub: PubSpec | None = None
 
     @property
     def wired(self) -> bool:
@@ -203,6 +247,11 @@ class Action:
     def has_modes(self) -> bool:
         """True when the launcher should add a mode-selection step after the action."""
         return bool(self.modes)
+
+    @property
+    def is_pub(self) -> bool:
+        """True when this action publishes a control message instead of launching."""
+        return self.pub is not None
 
 
 # Robot + variant lists mirror fm_description/launch/view_robot.launch.py.
@@ -431,6 +480,15 @@ ACTIONS: tuple[Action, ...] = (
         key="teleoperation",
         label="Teleoperation",
         modes=(_VISION_MODE, _LEADER_FOLLOWER_MODE),
+    ),
+    # Control action (no launch): start/stop an episode on the remote recorder rig. The
+    # rig runs the camera + recorder headless; this publishes /capture/record (Bool) so
+    # the operator records from the TUI. Reaches the rig over DDS (native pixi + dds-lan
+    # join the launcher's env to the rig's graph).
+    Action(
+        key="record",
+        label="Record Episode",
+        pub=PubSpec(topic="/capture/record"),
     ),
     # Stub — planned surface, no launch graph yet. launch=None renders disabled.
     Action(key="autonomous", label="Autonomous"),

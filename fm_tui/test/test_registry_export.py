@@ -215,3 +215,53 @@ def test_vision_argv_parity_with_params():
     assert argv == spec.command("openarm", "default_bimanual", "mujoco", params=params)
     # host_only fields never leak into the launch argv.
     assert not any(a.startswith(("camera:=", "phone_ip:=")) for a in argv)
+
+
+# --- pub actions (schema 4): the control action the desktop rebuilds ----------------
+
+
+def _pub_action_src():
+    """The in-process Record action (source of truth for its PubSpec)."""
+    return next(a for a in actions() if a.key == "record")
+
+
+def _pub_action_json():
+    """The serialised Record action (as a reader sees it)."""
+    return {a["key"]: a for a in _roundtrip()["actions"]}["record"]
+
+
+def test_pub_action_round_trips():
+    src = _pub_action_src()
+    got = _pub_action_json()
+    assert src.is_pub and src.pub is not None
+    # A pub action carries no launch — a reader dispatches it via `pub`, not a launch argv.
+    assert got["launch"] is None
+    assert got["wired"] is False
+    assert got["pub"]["topic"] == src.pub.topic
+    assert got["pub"]["msg_type"] == src.pub.msg_type
+    assert got["pub"]["options"] == [list(o) for o in src.pub.options]
+
+
+def test_launch_actions_carry_null_pub():
+    # A launch/mode/stub action serialises `pub` as null, so a reader's branch is
+    # unambiguous rather than a missing key.
+    by_key = {a["key"]: a for a in _roundtrip()["actions"]}
+    assert by_key["simulation"]["pub"] is None
+    assert by_key["teleoperation"]["pub"] is None
+    assert by_key["autonomous"]["pub"] is None
+
+
+def _argv_from_pub(pub: dict, value: str):
+    """Rebuild the one-shot ``ros2 topic pub`` argv from the serialised pub dict — the
+    exact logic an out-of-process front end reimplements (mirrors ``PubSpec.command``)."""
+    return [
+        "ros2", "topic", "pub", "--times", "3", "--rate", "5",
+        pub["topic"], pub["msg_type"], "{data: %s}" % value,
+    ]
+
+
+def test_pub_argv_rebuilt_from_json_matches_command():
+    src = _pub_action_src().pub
+    got = _pub_action_json()["pub"]
+    for _label, value in src.options:
+        assert _argv_from_pub(got, value) == src.command(value)

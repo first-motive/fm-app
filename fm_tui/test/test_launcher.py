@@ -254,6 +254,64 @@ def test_back_from_params_returns_to_backend():
     asyncio.run(go())
 
 
+def test_record_action_dispatches_pub(monkeypatch, tmp_path):
+    # Record is a control action: selecting it lists Start/Stop (no robot step), and
+    # choosing one exits with a one-shot `ros2 topic pub` to /capture/record.
+    monkeypatch.setenv("FM_TUI_CONFIG", str(tmp_path / "cfg.json"))
+
+    async def go():
+        async with FmLauncherApp().run_test() as pilot:
+            await pilot.pause()
+            menu = pilot.app.query_one("#menu", ListView)
+            menu.index = [a.key for a in actions()].index("record")
+            await pilot.press("enter")  # action -> pub options (Start/Stop)
+            await pilot.pause()
+            # The option step lists the PubSpec options, not robots.
+            assert [it._text for it in menu.children] == ["Start", "Stop"]
+            await pilot.press("enter")  # Start -> dispatch + exit
+            await pilot.pause()
+        assert pilot.app.return_value == [
+            "ros2", "topic", "pub", "--times", "3", "--rate", "5",
+            "/capture/record", "std_msgs/msg/Bool", "{data: true}",
+        ]
+
+    asyncio.run(go())
+
+
+def test_record_stop_dispatches_false(monkeypatch, tmp_path):
+    monkeypatch.setenv("FM_TUI_CONFIG", str(tmp_path / "cfg.json"))
+
+    async def go():
+        async with FmLauncherApp().run_test() as pilot:
+            await pilot.pause()
+            menu = pilot.app.query_one("#menu", ListView)
+            menu.index = [a.key for a in actions()].index("record")
+            await pilot.press("enter")  # -> pub options
+            await pilot.pause()
+            menu.index = 1  # Stop
+            await pilot.press("enter")  # dispatch + exit
+            await pilot.pause()
+        assert pilot.app.return_value[-1] == "{data: false}"
+
+    asyncio.run(go())
+
+
+def test_back_from_pub_returns_to_actions():
+    async def go():
+        async with FmLauncherApp().run_test() as pilot:
+            await pilot.pause()
+            menu = pilot.app.query_one("#menu", ListView)
+            menu.index = [a.key for a in actions()].index("record")
+            await pilot.press("enter")  # -> pub options (Start/Stop)
+            await pilot.pause()
+            assert len(menu) == 2
+            await pilot.press("escape")  # back to the action list
+            await pilot.pause()
+            assert len(menu) == len(actions())
+
+    asyncio.run(go())
+
+
 def test_stub_does_not_dispatch():
     async def go():
         async with FmLauncherApp().run_test() as pilot:
