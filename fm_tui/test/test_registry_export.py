@@ -83,7 +83,11 @@ def test_teleoperation_group_serialises_its_modes():
     # A mode group carries no launch of its own; its modes hold the launch-bearing shape.
     assert teleop["wired"] is False
     assert teleop["launch"] is None
-    assert [m["key"] for m in teleop["modes"]] == ["vision_mirror", "leader_follower"]
+    assert [m["key"] for m in teleop["modes"]] == [
+        "vision_mirror",
+        "remote_mirror",
+        "leader_follower",
+    ]
     assert all(m["launch"] is not None for m in teleop["modes"])
 
 

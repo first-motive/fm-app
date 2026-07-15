@@ -438,6 +438,33 @@ _LEADER_FOLLOWER_MODE = Mode(
     backends=_SIM_BACKENDS,
 )
 
+# Remote Mirror: the robot side ONLY (sim + pose_tracking + a bare mirror_source), driven by a
+# hand tracked on the remote recorder rig. mirror_source subscribes the rig's /vision/hand_pose
+# over DDS — no local camera/tracker — so the operator's hand (seen by the rig's RealSense) mirrors
+# onto the sim arm. Single-arm (openarm right_arm): the rig tracks one hand. Needs the Mac joined to
+# the rig's DDS graph (native pixi + dds-lan; ./run.sh --native).
+_REMOTE_ROBOTS = (
+    Robot(
+        key="openarm",
+        label="Enactic OpenArm",
+        variants=("right_arm",),
+        default_variant="right_arm",
+        variant_labels={"right_arm": "Right arm only"},
+    ),
+)
+_REMOTE_CLIENT = LaunchSpec(
+    package="fm_bringup",
+    launch_file="remote_client.launch.py",
+    backend_arg="sim_backend",
+)
+_REMOTE_MIRROR_MODE = Mode(
+    key="remote_mirror",
+    label="Remote Mirror (rig)",
+    launch=_REMOTE_CLIENT,
+    robots=_REMOTE_ROBOTS,
+    backends=_VISION_BACKENDS,
+)
+
 # Data Capture records a dataset. Today it drives the vision session with the recorder
 # forced on: the shared vision teleop launch (_VISION) leaves recording runtime-toggled,
 # so Data Capture rides on a copy that adds a `record` field defaulting "true" — record:=true
@@ -479,7 +506,7 @@ ACTIONS: tuple[Action, ...] = (
     Action(
         key="teleoperation",
         label="Teleoperation",
-        modes=(_VISION_MODE, _LEADER_FOLLOWER_MODE),
+        modes=(_VISION_MODE, _REMOTE_MIRROR_MODE, _LEADER_FOLLOWER_MODE),
     ),
     # Control action (no launch): start/stop an episode on the remote recorder rig. The
     # rig runs the camera + recorder headless; this publishes /capture/record (Bool) so
