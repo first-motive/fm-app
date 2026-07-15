@@ -136,6 +136,31 @@
              border:1px solid rgba(236,231,216,0.3); font-size:12px; font-weight:700; letter-spacing:2.5px; }
   .stopbtn:not(:disabled):hover { border-color:rgba(236,231,216,0.55); background:rgba(236,231,216,0.05); }
 
+  /* recorder sensor checklist (bound to /fm_data_record/recorder_status devices) */
+  .sensors { display:flex; flex-direction:column; gap:8px; min-height:0; }
+  .sensors[hidden] { display:none; }
+  .sensors-head { display:flex; align-items:center; gap:10px; width:100%; padding:2px 0;
+                  background:transparent; border:none; cursor:pointer; text-align:left; }
+  .sensors-head .lbl { font-family:var(--mono); font-size:10px; letter-spacing:3px;
+                       text-transform:uppercase; color:var(--muted); }
+  .sensors-sum { margin-left:auto; font-family:var(--mono); font-size:10px; letter-spacing:1px; color:var(--muted2); }
+  .sensors-caret { font-size:9px; color:var(--muted2); transition:transform .12s; }
+  .sensors.collapsed .sensors-caret { transform:rotate(-90deg); }
+  .sensors.collapsed .sensors-body { display:none; }
+  .sensors-body { display:flex; flex-direction:column; gap:1px; overflow-y:auto; max-height:190px; padding-right:4px; }
+  .srow { display:flex; align-items:center; gap:10px; padding:6px 4px; border-radius:5px;
+          cursor:pointer; margin:0; }
+  .srow:hover { background:rgba(236,231,216,0.03); }
+  .srow input { width:14px; height:14px; flex-shrink:0; cursor:pointer; accent-color:var(--accent); margin:0; }
+  .srow .sdot { width:8px; height:8px; border-radius:50%; background:var(--muted2); flex-shrink:0; }
+  .srow .sdot.live { background:var(--ok); }
+  .srow .sdot.dead { background:var(--coral); animation:fmpulse 1.2s ease-in-out infinite; }
+  .srow .sname { font-family:var(--mono); font-size:12px; color:var(--cream); }
+  .srow.off .sname { color:var(--muted2); }
+  .srow .swarn { color:var(--coral2); font-size:10px; flex-shrink:0; }
+  .srow .smod { margin-left:auto; font-family:var(--mono); font-size:9px; letter-spacing:0.5px;
+                color:var(--muted2); text-align:right; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:120px; }
+
   /* footer */
   footer { padding-top:14px; border-top:1px solid var(--edge); display:flex; align-items:center; gap:11px;
            font-family:var(--mono); font-size:12px; letter-spacing:0.5px; color:var(--muted); }
@@ -286,6 +311,19 @@
         <div class="cell"><label>Latency</label><span class="val" id="latval">—</span></div>
       </div>
 
+      <!-- Recorder sensor checklist: shown only while the recorder publishes
+           /fm_data_record/recorder_status. Toggling a box publishes the disabled
+           set on /capture/sensors; the panel re-renders from the recorder's echo. -->
+      <div class="sensors" id="sensors" hidden>
+        <div class="divider"></div>
+        <button class="sensors-head" id="sensors-toggle" type="button">
+          <span class="lbl">Sensors</span>
+          <span class="sensors-sum" id="sensors-sum">—</span>
+          <span class="sensors-caret">▾</span>
+        </button>
+        <div class="sensors-body" id="sensors-body"></div>
+      </div>
+
       <div class="spacer"></div>
 
       <button class="btn recbtn act" id="recbtn" data-topic="/capture/record" data-val="1"><span class="d2"></span><span id="reclabel">Rec</span></button>
@@ -319,20 +357,23 @@
 <script>
 "use strict";
 // ---- Foxglove WebSocket protocol (v1) client, dependency-free -------------------------
-// Talks to foxglove_bridge (ws://localhost:8765). Subscribes to /vision/image (jpeg) and
-// /capture/status (String); publishes std_msgs/Bool to /vision/engage, /vision/reset,
-// /capture/record. clientPublish is enabled on the bridge by default.
+// Talks to foxglove_bridge (ws://localhost:8765). Subscribes to /vision/image (jpeg),
+// /capture/status (String), and /fm_data_record/recorder_status (latched JSON);
+// publishes std_msgs/Bool to /vision/engage, /vision/reset, /capture/record and
+// std_msgs/String to /capture/select, /capture/sensors. clientPublish is enabled on
+// the bridge by default.
 
 const SUB_TOPICS = {
-  "/vision/image":            onImage,
-  "/capture/status":          onStatus,
-  "/vision/engage":           onEngage,
-  "/vision/tracking_active":  onTracking,
-  "/robot_description":       onRobotDescription,   // 3D: URDF (latched String)
-  "/joint_states":            onJointStates,        // 3D: drive arm joints
-  "/target_pose":             onTargetPose,         // 3D: target gizmo
-  "/capture/index":           onCaptureIndex,       // recordings: session list (latched JSON)
-  "/capture/detail":          onCaptureDetail,      // recordings: selected session (JSON)
+  "/vision/image":                  onImage,
+  "/capture/status":                onStatus,
+  "/fm_data_record/recorder_status": onRecorderStatus,  // sensor checklist (latched JSON)
+  "/vision/engage":                 onEngage,
+  "/vision/tracking_active":        onTracking,
+  "/robot_description":             onRobotDescription,  // 3D: URDF (latched String)
+  "/joint_states":                  onJointStates,       // 3D: drive arm joints
+  "/target_pose":                   onTargetPose,        // 3D: target gizmo
+  "/capture/index":                 onCaptureIndex,      // recordings: session list (latched JSON)
+  "/capture/detail":                onCaptureDetail,     // recordings: selected session (JSON)
 };
 // Client publish channels (arbitrary ids we assign). encoding cdr, schema std_msgs/msg/Bool.
 const PUB_TOPICS = ["/vision/engage", "/vision/reset", "/capture/record"];
@@ -470,10 +511,13 @@ function advertisePublishers() {
     pubChanByTopic.set(topic, id);
     return { id, topic, encoding: "cdr", schemaName: BOOL_SCHEMA };
   });
-  // /capture/select is a std_msgs/String request for the recordings viewer.
-  const sid = nextPubId++;
-  pubChanByTopic.set("/capture/select", sid);
-  channels.push({ id: sid, topic: "/capture/select", encoding: "cdr", schemaName: "std_msgs/msg/String" });
+  // std_msgs/String client requests: /capture/select (recordings viewer) and
+  // /capture/sensors (sensor checklist disabled-device set).
+  for (const topic of ["/capture/select", "/capture/sensors"]) {
+    const sid = nextPubId++;
+    pubChanByTopic.set(topic, sid);
+    channels.push({ id: sid, topic, encoding: "cdr", schemaName: "std_msgs/msg/String" });
+  }
   ws.send(JSON.stringify({ op: "advertise", channels }));
   console.log("[ws] advertise publishers", channels);
 }
@@ -559,6 +603,83 @@ function onStatus(payload) {
 function onEngage(payload)   { ui.engaged = payload[payload.length - 1] === 1; setDot("dot-engage", ui.engaged); render(); }
 function onTracking(payload) { ui.tracking = payload[payload.length - 1] === 1; setDot("dot-track",  ui.tracking); }
 function setDot(id, on) { document.getElementById(id).classList.toggle("on", !!on); }
+
+// ---- recorder sensor checklist --------------------------------------------------------
+// The recorder publishes a latched JSON status on /fm_data_record/recorder_status:
+//   { devices:[{device,modalities,topics,required}], disabled_devices:[...],
+//     topic_liveness:{ "<topic>":{state:"flowing|no_data|not_subscribed|disabled"} } }
+// Render one checklist row per device with a live dot (worst-of its topics), and
+// publish the operator's disabled set on /capture/sensors. The recorder masks the
+// deselected devices and echoes the set in its next status, so the panel reflects
+// recorder truth rather than local state — the same discipline as the REC button.
+const sensorsEl = document.getElementById("sensors");
+const sensorsBody = document.getElementById("sensors-body");
+const sensorsSum = document.getElementById("sensors-sum");
+let recDevices = [], recDisabled = new Set(), recLiveness = {};
+
+document.getElementById("sensors-toggle")
+  .addEventListener("click", () => sensorsEl.classList.toggle("collapsed"));
+
+function onRecorderStatus(payload) {
+  let st;
+  try { st = JSON.parse(cdrString(payload)); }
+  catch (e) { console.warn("[sensors] bad recorder_status", e); return; }
+  recDevices = Array.isArray(st.devices) ? st.devices : [];
+  recDisabled = new Set(st.disabled_devices || []);
+  recLiveness = st.topic_liveness || {};
+  renderSensors();
+}
+
+// One dot per device, aggregated worst-state-wins over its topics: operator-disabled
+// -> off (grey); any topic no_data/not_subscribed -> dead (red); else something
+// flowing -> live (green); nothing observed yet -> off.
+function deviceLive(dev) {
+  if (recDisabled.has(dev.device)) return "off";
+  const states = (dev.topics || []).map((t) => recLiveness[t] && recLiveness[t].state);
+  if (states.some((s) => s === "no_data" || s === "not_subscribed")) return "dead";
+  if (states.some((s) => s === "flowing")) return "live";
+  return "off";
+}
+
+function renderSensors() {
+  if (!recDevices.length) { sensorsEl.hidden = true; return; }
+  sensorsEl.hidden = false;
+  sensorsBody.innerHTML = "";
+  let live = 0;
+  for (const dev of recDevices) {
+    const enabled = !recDisabled.has(dev.device);
+    const state = deviceLive(dev);
+    if (state === "live") live++;
+    const row = document.createElement("label");
+    row.className = "srow" + (enabled ? "" : " off");
+    row.dataset.device = dev.device;
+    const warn = dev.required ? '<span class="swarn" title="required sensor">▲</span>' : "";
+    row.innerHTML =
+      '<input type="checkbox"' + (enabled ? " checked" : "") + ">" +
+      '<span class="sdot ' + state + '"></span>' +
+      '<span class="sname">' + esc(dev.device) + "</span>" + warn +
+      '<span class="smod">' + esc((dev.modalities || []).join(" · ")) + "</span>";
+    row.querySelector("input").addEventListener("change", (e) => onSensorToggle(dev, e.target));
+    sensorsBody.appendChild(row);
+  }
+  sensorsSum.textContent = live + " / " + recDevices.length + " live";
+}
+
+function onSensorToggle(dev, box) {
+  // Deselecting a load-bearing (required) sensor asks first.
+  if (!box.checked && dev.required &&
+      !confirm(dev.device + " is a required sensor — disable it for this session?")) {
+    box.checked = true;
+    return;
+  }
+  // Publish the disabled set from the current checkbox states. This is a request:
+  // the panel re-renders from the recorder's echoed status, not from here.
+  const disabled = [];
+  sensorsBody.querySelectorAll(".srow").forEach((row) => {
+    if (!row.querySelector("input").checked) disabled.push(row.dataset.device);
+  });
+  publishString("/capture/sensors", JSON.stringify({ disabled_devices: disabled }));
+}
 
 // ---- 3D arm viewer (three.js over the same bridge; no Foxglove app) --------------------
 let threeReady = false, hasAssets = false, urdfXml = null;
