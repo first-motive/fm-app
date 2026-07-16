@@ -8,9 +8,11 @@ document those front ends read once and rebuild their menu from.
 
 The document carries everything :meth:`fm_tui.registry.LaunchSpec.command` needs to
 rebuild a launch argv without importing Python: each wired action's launch spec
-(package, launch file, the arg names, the ``viewer_aware`` flag) plus the viewer
-options and the standing viewer default. A front end that mirrors ``command()``
-against this JSON produces byte-identical argv — the round-trip test guards that.
+(package, launch file, the arg names, its form ``fields``, the ``viewer_aware`` flag)
+plus the viewer options and the standing viewer default. The ``fields`` also let a
+front end render the parameter form (camera, rotate_deg, gripper, …) that a fielded
+action — e.g. vision teleop — needs. A front end that mirrors ``command()`` against
+this JSON produces byte-identical argv — the round-trip test guards that.
 
 Invocation (installed as the ``registry`` console script)::
 
@@ -27,12 +29,42 @@ import json
 import sys
 
 from fm_tui import config
-from fm_tui.registry import Action, LaunchSpec, Mode, actions
+from fm_tui.registry import Action, Field, LaunchSpec, Mode, PubSpec, actions
 
 # Bump on any breaking shape change to the exported document. Readers pin the
 # major they understand and refuse anything newer.
 #   2  added the optional per-action `modes` level (action -> mode -> robot -> …).
-SCHEMA_VERSION = 2
+#   3  added each launch's form `fields` (so a front end can build the parameter
+#      form — camera, rotate_deg, gripper, …) and each robot's `variant_labels`.
+#   4  added the optional per-action `pub` (a non-launch control action that
+#      publishes a one-shot topic — Record toggles /capture/record on the rig).
+SCHEMA_VERSION = 4
+
+
+def _field_to_dict(field_spec: Field) -> dict:
+    """Serialise one form field — everything a front end needs to render the form
+    step AND rebuild argv the way ``command()`` does (host_only skip, show_if gate,
+    default fallback, declaration order). All seven attributes; tuples -> lists."""
+    return {
+        "name": field_spec.name,
+        "label": field_spec.label,
+        "default": field_spec.default,
+        "required": field_spec.required,
+        "choices": list(field_spec.choices),
+        "host_only": field_spec.host_only,
+        "show_if": list(field_spec.show_if),  # [] = always shown; else [ctrl, value]
+    }
+
+
+def _pub_to_dict(pub: PubSpec) -> dict:
+    """Serialise a pub spec — the topic, message type, and labelled payloads a non-launch
+    control action publishes. A front end rebuilds the ``ros2 topic pub`` argv from these
+    exactly as :meth:`PubSpec.command` does (``--times 3 --rate 5``, ``{data: <value>}``)."""
+    return {
+        "topic": pub.topic,
+        "msg_type": pub.msg_type,
+        "options": [[label, value] for label, value in pub.options],
+    }
 
 
 def _launch_to_dict(launch: LaunchSpec) -> dict:
@@ -43,18 +75,22 @@ def _launch_to_dict(launch: LaunchSpec) -> dict:
         "robot_arg": launch.robot_arg,
         "variant_arg": launch.variant_arg,
         "backend_arg": launch.backend_arg,
+        "fields": [_field_to_dict(f) for f in launch.fields],
         "viewer_aware": launch.viewer_aware,
     }
 
 
 def _robots_to_list(robots) -> list:
-    """Serialise a robots tuple — key, label, variants, and the default variant."""
+    """Serialise a robots tuple — key, label, variants, the default variant, and the
+    optional friendly variant labels (raw key -> menu text; the dispatched value stays
+    the raw key)."""
     return [
         {
             "key": robot.key,
             "label": robot.label,
             "variants": list(robot.variants),
             "default_variant": robot.default_variant,
+            "variant_labels": dict(robot.variant_labels),
         }
         for robot in robots
     ]
@@ -85,6 +121,7 @@ def _action_to_dict(action: Action) -> dict:
         "robots": _robots_to_list(action.robots),
         "backends": list(action.backends),
         "modes": [_mode_to_dict(mode) for mode in action.modes],
+        "pub": _pub_to_dict(action.pub) if action.pub else None,
     }
 
 
