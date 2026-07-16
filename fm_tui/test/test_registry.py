@@ -48,8 +48,12 @@ def test_teleoperation_is_a_mode_group():
     assert not entry.wired
     assert entry.launch is None
     assert entry.robots == ()
-    assert [m.key for m in entry.modes] == ["vision_mirror", "leader_follower"]
-    # Both modes are wired and keep the backend step.
+    assert [m.key for m in entry.modes] == [
+        "vision_mirror",
+        "remote_mirror",
+        "leader_follower",
+    ]
+    # Every mode is wired and keeps the backend step.
     for mode in entry.modes:
         assert mode.wired
         assert mode.has_backends
@@ -60,6 +64,19 @@ def test_leader_follower_mode_carries_the_teleop_launch():
     assert lf.launch.launch_file == "teleop.launch.py"
     assert {r.key for r in lf.robots} == {"openarm", "so101", "g1_d", "axol"}
     assert "mujoco" in lf.backends
+
+
+def test_remote_mirror_mode_targets_the_remote_client_launch():
+    rm = _mode("teleoperation", "remote_mirror")
+    assert rm.wired
+    assert rm.launch.launch_file == "remote_client.launch.py"
+    assert rm.has_backends
+    # Single-arm only — the rig tracks one hand.
+    assert {r.key for r in rm.robots} == {"openarm"}
+    assert rm.robots[0].variants == ("right_arm",)
+    assert set(rm.backends) >= {"mujoco", "mock"}
+    # No form fields — it's rig-sourced (no local camera to configure).
+    assert not rm.launch.has_fields
 
 
 def test_data_capture_is_wired_and_records():
