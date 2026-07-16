@@ -13,9 +13,9 @@ sim is already up):
     mirror_datalogger   the /capture/record start/stop recorder (Foxglove REC/STOP buttons)
     arm_reset           /vision/reset -> disengage + drive the arm home (Foxglove RESET button)
 
-Prerequisites: the host camera relay must already be running (macOS: scripts/mac_camera_bridge.py
-or socat) and `camera_source` must point at it. In Foxglove Studio, connect to ws://localhost:8765
-and import foxglove/mirror_teleop.json (Layouts -> Import from file).
+Prerequisites: `camera_source` selects the camera when `camera_input=device` — default 0 (the
+host's built-in webcam); a device index or stream URL also works. In Foxglove Studio, connect to
+ws://localhost:8765 and import foxglove/mirror_teleop.json (Layouts -> Import from file).
 """
 
 import os
@@ -260,9 +260,9 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "camera_source",
-                default_value="http://host.docker.internal:8090/video",
-                description="Camera stream URL. On macOS this is the host relay "
-                "(scripts/mac_camera_bridge.py / socat) that bridges the phone stream.",
+                default_value="0",
+                description="Camera device index (default 0 = the host's built-in webcam) "
+                "or a stream URL. Used when camera_input=device.",
             ),
             DeclareLaunchArgument(
                 "rotate_deg",

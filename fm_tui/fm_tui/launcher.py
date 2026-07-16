@@ -157,9 +157,6 @@ class FmLauncherApp(App):
         # The standing viewer default, loaded from the persisted config. The `v`
         # binding flips and re-persists it; _dispatch reads it at launch time.
         self._viewer = config.get_viewer()
-        # Last camera choice (+ phone IP), used to prefill the vision form so the
-        # phone IP carries across runs. _try_launch re-persists it on dispatch.
-        self._camera_cfg = config.get_camera()
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -390,11 +387,7 @@ class FmLauncherApp(App):
     # --- params form -------------------------------------------------------
 
     def _initial_value(self, field_spec) -> str:
-        """Prefill value for a form field: persisted camera choice for the camera
-        picker (so the phone IP + mac/phone default carry across runs), else the
-        field's declared default."""
-        if field_spec.name in self._camera_cfg:
-            return self._camera_cfg[field_spec.name]
+        """Prefill value for a form field: the field's declared default."""
         return field_spec.default
 
     def _enter_params(self) -> None:
@@ -423,10 +416,10 @@ class FmLauncherApp(App):
                 widget = Input(value=initial, id=f"field-{field_spec.name}")
             self._field_inputs[field_spec.name] = widget
             widgets.append(widget)
-        # An explicit submit control: the first field is often a Select (camera),
-        # and Enter on a Select opens its dropdown rather than submitting. The
-        # button (and Enter in any Input) both dispatch. Tab reaches it; it is the
-        # last widget so it sits below the fields.
+        # An explicit submit control: several fields are Selects, and Enter on a
+        # Select opens its dropdown rather than submitting. The button (and Enter in
+        # any Input) both dispatch. Tab reaches it; it is the last widget so it sits
+        # below the fields.
         widgets.append(Button("Launch", id="form-launch", variant="primary"))
         self._param_widgets = widgets
         # Mount into the bordered panel that holds the menu, after the (now hidden) ListView.
@@ -438,10 +431,10 @@ class FmLauncherApp(App):
     def _apply_field_visibility(self) -> None:
         """Show/hide conditional fields against their controlling field's current value.
 
-        A field with ``show_if=(name, value)`` (e.g. the phone IP, gated on Camera ==
-        "phone") is displayed only while the controlling field holds ``value``; its label
-        and input are hidden together otherwise. Hidden fields keep their value, so the
-        launch args and camera-config persistence in :meth:`_try_launch` are unaffected.
+        A field with ``show_if=(name, value)`` is displayed only while the controlling
+        field holds ``value``; its label and input are hidden together otherwise. Hidden
+        fields keep their value, so the launch args in :meth:`_try_launch` are unaffected.
+        (No field uses show_if today; the mechanism is retained for future forms.)
         """
         for field_spec in self._source.launch.fields:
             if not field_spec.show_if:
@@ -493,17 +486,6 @@ class FmLauncherApp(App):
                 self._field_inputs[field_spec.name].focus()
                 return
             params[field_spec.name] = value
-        # Camera picker: phone needs an IP, and the choice is persisted for the
-        # host relay manager (the container can't start the relay itself). This
-        # runs after the generic checks so choices are already validated.
-        if "camera" in params:
-            if params["camera"] == "phone" and not params.get("phone_ip"):
-                self.notify(
-                    "Phone IP is required when Camera is 'phone'.", severity="warning"
-                )
-                self._field_inputs["phone_ip"].focus()
-                return
-            config.set_camera(params["camera"], params.get("phone_ip", ""))
         self._dispatch(self._variant, self._backend, params)
 
     def _exit_params(self) -> None:

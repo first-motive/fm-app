@@ -157,20 +157,16 @@ def test_vision_is_wired_with_fields_and_openarm_only():
     assert set(entry.backends) >= {"mujoco", "mock"}
     names = [f.name for f in entry.launch.fields]
     assert names == [
-        "camera",
-        "phone_ip",
         "rotate_deg",
         "tracking_mode",
         "capture_hands",
         "camera_input",
         "gripper",
     ]
-    # The camera picker is host_only: collected + persisted for the host relay
-    # manager, never a launch arg. Every other field must match a vision_session arg.
-    assert {f.name for f in entry.launch.fields if f.host_only} == {"camera", "phone_ip"}
-    # The phone IP is form-conditional: shown only when Camera == "phone".
-    phone_ip = next(f for f in entry.launch.fields if f.name == "phone_ip")
-    assert phone_ip.show_if == ("camera", "phone")
+    # The phone/webcam picker was removed — every field now maps to a vision_session
+    # launch arg, so none are host_only or form-conditional.
+    assert not any(f.host_only for f in entry.launch.fields)
+    assert not any(f.show_if for f in entry.launch.fields)
 
 
 def test_vision_openarm_variant_labels():
@@ -190,8 +186,6 @@ def test_vision_command_appends_only_launch_fields_after_backend():
         "right_arm",
         "mujoco",
         params={
-            "camera": "phone",
-            "phone_ip": "192.168.1.207",
             "rotate_deg": "90",
             "tracking_mode": "hand",
             "capture_hands": "both",
@@ -213,15 +207,14 @@ def test_vision_command_appends_only_launch_fields_after_backend():
         "camera_input:=topic",
         "gripper:=off",
     ]
-    # host_only picker fields never reach the launch argv (they drive the host relay).
-    assert not any(a.startswith(("camera:=", "phone_ip:=")) for a in cmd)
+    # camera_source is a vision_session launch default, not a TUI field — never in the argv.
     assert not any("camera_source" in a for a in cmd)
 
 
 def test_vision_command_uses_field_defaults_when_params_absent():
     spec = _mode("teleoperation", "vision_mirror").launch
     cmd = spec.command("openarm", "right_arm", "mujoco")
-    # Only the non-host_only fields fall back to defaults, in declaration order.
+    # All fields fall back to their defaults, in declaration order.
     assert cmd[-5:] == [
         "rotate_deg:=90",
         "tracking_mode:=hand",
@@ -229,9 +222,8 @@ def test_vision_command_uses_field_defaults_when_params_absent():
         "camera_input:=device",
         "gripper:=off",
     ]
-    # camera / phone_ip are host_only, so the picker never reaches the argv (camera_input
-    # is a separate real launch arg and IS expected).
-    assert not any(a.startswith(("camera:=", "phone_ip:=", "camera_source")) for a in cmd)
+    # camera_source is a vision_session launch default, not a TUI field — never in the argv.
+    assert not any(a.startswith("camera_source") for a in cmd)
 
 
 def test_fieldless_command_appends_no_extra_args():

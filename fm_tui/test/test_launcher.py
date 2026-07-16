@@ -6,7 +6,7 @@ value (the ``ros2 launch`` argv), never by running it.
 
 import asyncio
 
-from textual.widgets import Button, Input, ListView, Select
+from textual.widgets import Button, ListView
 
 from textual.color import Color
 
@@ -69,9 +69,6 @@ def test_vision_form_dispatches_bimanual_variant(monkeypatch, tmp_path):
             menu.index = 1  # Both arms (bimanual)
             await pilot.press("enter")  # variant -> backend (mujoco default)
             await pilot.press("enter")  # backend -> params form
-            await pilot.pause()
-            # Mac camera needs no IP, so the form can submit immediately.
-            pilot.app.query_one("#field-camera", Select).value = "mac"
             await pilot.pause()
             pilot.app.set_focus(pilot.app.query_one("#form-launch", Button))
             await pilot.press("enter")  # dispatch + exit
@@ -151,23 +148,18 @@ def test_backend_path_dispatches_with_sim_backend(monkeypatch, tmp_path):
     asyncio.run(go())
 
 
-def test_vision_form_dispatches_mac_needs_no_ip(monkeypatch, tmp_path):
+def test_vision_form_dispatches_with_defaults(monkeypatch, tmp_path):
     monkeypatch.setenv("FM_TUI_CONFIG", str(tmp_path / "cfg.json"))
 
     async def go():
         async with FmLauncherApp().run_test() as pilot:
             await pilot.pause()
             await _walk_to_vision_form(pilot)
-            # Pick the Mac built-in camera — no IP required.
-            pilot.app.query_one("#field-camera", Select).value = "mac"
-            await pilot.pause()
-            # The phone IP field hides itself once the camera is not "phone".
-            assert not pilot.app.query_one("#field-phone_ip", Input).display
             # Submit via the Launch button (Enter on a Select opens its dropdown).
             pilot.app.set_focus(pilot.app.query_one("#form-launch", Button))
             await pilot.press("enter")  # button press -> dispatch + exit
             await pilot.pause()
-        # host_only camera fields drive the host relay, so they never reach the argv.
+        # Only the vision_session launch args ride the argv — the phone/webcam picker is gone.
         assert pilot.app.return_value == [
             "ros2",
             "launch",
@@ -182,58 +174,6 @@ def test_vision_form_dispatches_mac_needs_no_ip(monkeypatch, tmp_path):
             "camera_input:=device",
             "gripper:=off",
         ]
-        # The choice is persisted for the host camera manager.
-        assert config.get_camera() == {"camera": "mac", "phone_ip": ""}
-
-    asyncio.run(go())
-
-
-def test_vision_form_phone_requires_ip_then_persists(monkeypatch, tmp_path):
-    monkeypatch.setenv("FM_TUI_CONFIG", str(tmp_path / "cfg.json"))
-
-    async def go():
-        async with FmLauncherApp().run_test() as pilot:
-            await pilot.pause()
-            await _walk_to_vision_form(pilot)
-            # Camera defaults to phone with an empty IP -> submitting is blocked.
-            assert pilot.app.query_one("#field-camera", Select).value == "phone"
-            # Camera == "phone", so the phone IP field is shown.
-            assert pilot.app.query_one("#field-phone_ip", Input).display
-            pilot.app.query_one("#field-phone_ip", Input).focus()
-            await pilot.pause()
-            await pilot.press("enter")  # Enter in the (empty) IP field -> blocked
-            await pilot.pause()
-            assert pilot.app.is_running
-            assert pilot.app.return_value is None
-            # Provide the IP (bare LAN IP, no port) -> dispatches.
-            pilot.app.query_one("#field-phone_ip", Input).value = "192.168.1.207"
-            await pilot.press("enter")
-            await pilot.pause()
-        assert pilot.app.return_value is not None
-        # host_only camera picker never reaches the argv (camera_input is a real arg).
-        assert not any(a.startswith(("camera:=", "phone_ip:=")) for a in pilot.app.return_value)
-        # Persisted for the host relay manager, IP included for next-run prefill.
-        assert config.get_camera() == {
-            "camera": "phone",
-            "phone_ip": "192.168.1.207",
-        }
-
-    asyncio.run(go())
-
-
-def test_vision_form_prefills_persisted_camera(monkeypatch, tmp_path):
-    monkeypatch.setenv("FM_TUI_CONFIG", str(tmp_path / "cfg.json"))
-    config.set_camera("phone", "10.0.0.9:8081")
-
-    async def go():
-        async with FmLauncherApp().run_test() as pilot:
-            await pilot.pause()
-            await _walk_to_vision_form(pilot)
-            # The form opens on the last-used camera + IP, not the static defaults.
-            assert pilot.app.query_one("#field-camera", Select).value == "phone"
-            assert (
-                pilot.app.query_one("#field-phone_ip", Input).value == "10.0.0.9:8081"
-            )
 
     asyncio.run(go())
 
