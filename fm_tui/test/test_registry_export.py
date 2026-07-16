@@ -184,16 +184,13 @@ def test_fieldless_launch_carries_empty_fields():
     assert sim["fields"] == []
 
 
-def test_vision_form_carries_host_only_and_show_if():
-    fields = {f["name"]: f for f in _vision_launch_json()["fields"]}
-    # The camera picker + its conditional IP drive a host-side relay, not argv.
-    assert fields["camera"]["host_only"] is True
-    assert fields["phone_ip"]["host_only"] is True
-    # phone_ip appears only while Camera == "phone".
-    assert fields["phone_ip"]["show_if"] == ["camera", "phone"]
-    # A normal launch arg is neither host_only nor conditional.
-    assert fields["rotate_deg"]["host_only"] is False
-    assert fields["rotate_deg"]["show_if"] == []
+def test_vision_form_has_no_host_only_or_conditional_fields():
+    # The phone/webcam picker (the only host_only + show_if fields) was removed; every
+    # field is now a plain vision_session launch arg. The plumbing still serialises.
+    fields = _vision_launch_json()["fields"]
+    assert fields, "vision launch is expected to carry form fields"
+    assert not any(f["host_only"] for f in fields)
+    assert all(f["show_if"] == [] for f in fields)
 
 
 def test_vision_argv_parity_empty_params():
@@ -210,15 +207,12 @@ def test_vision_argv_parity_with_params():
     launch = _vision_launch_json()
     spec = _vision_launch_src()
     params = {
-        "camera": "phone", "phone_ip": "192.168.1.207", "rotate_deg": "90",
-        "tracking_mode": "hand", "gripper": "on",
+        "rotate_deg": "90", "tracking_mode": "hand", "gripper": "on",
     }
     argv = _argv_from_launch(
         launch, "openarm", "default_bimanual", backend="mujoco", params=params
     )
     assert argv == spec.command("openarm", "default_bimanual", "mujoco", params=params)
-    # host_only fields never leak into the launch argv.
-    assert not any(a.startswith(("camera:=", "phone_ip:=")) for a in argv)
 
 
 # --- pub actions (schema 4): the control action the desktop rebuilds ----------------

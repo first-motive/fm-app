@@ -42,15 +42,14 @@ class Field:
     default: str = ""
     required: bool = False  # non-empty value required to dispatch
     choices: tuple[str, ...] = ()  # if set, value must be one of these
-    # Collected in the form and persisted for a host-side helper, but NOT passed
-    # to ros2 launch. The camera picker uses this: the relay it selects can only
-    # run on the host (see scripts/run/camera-bridge.sh), so the container launch
-    # never sees it — command() skips host_only fields.
+    # Collected in the form and persisted for a host-side helper, but NOT passed to
+    # ros2 launch — command() skips host_only fields. Retained mechanism; no field
+    # uses it now (the phone/webcam camera picker that did was removed).
     host_only: bool = False
-    # Conditional visibility: when set to ``(field_name, value)``, the launcher
-    # shows this field only while the named sibling field holds ``value`` (e.g. the
-    # phone IP appears only when Camera == "phone"). Purely a form-display hint —
-    # command() and the export ignore it; a hidden field still carries its default.
+    # Conditional visibility: when set to ``(field_name, value)``, the launcher shows
+    # this field only while the named sibling field holds ``value``. Purely a form-
+    # display hint — command() and the export ignore it; a hidden field still carries
+    # its default. Retained mechanism; no field uses it now.
     show_if: tuple[str, str] = ()
 
 
@@ -339,29 +338,12 @@ _TELEOP = LaunchSpec(
 )
 
 # Vision 1:1 hand-mirror teleop: one launch stands up sim + mirror teleop + recorder + reset
-# (vision_session.launch.py). A few tuning knobs are collected in a form step; every non-
-# host_only field name must match a vision_session launch arg. Mirror teleop is openarm/
-# right_arm only today.
-#
-# Camera picker (host_only): the container reads its camera from a fixed host relay on
-# :8090 (vision_session's camera_source default), so the launch args are identical for
-# both sources. What differs is which host process feeds :8090 — the Mac's built-in camera
-# (mac_camera_bridge.py) or a socat relay to the phone's IP-webcam. The container can start
-# neither, so the choice + phone IP are persisted for the host manager (camera-bridge.sh)
-# instead of passed to the launch. phone_ip is required only when camera == "phone"
-# (enforced in the launcher).
+# (vision_session.launch.py). A few tuning knobs are collected in a form step; every field
+# name must match a vision_session launch arg. Mirror teleop is openarm/right_arm only today.
+# Camera source is the host's built-in webcam (vision_session's camera_source default 0); the
+# obsolete phone/socat relay picker was removed. (The Field host_only/show_if plumbing is kept
+# for future use — no field uses it now.)
 _VISION_FIELDS = (
-    Field("camera", "Camera", "phone", choices=("phone", "mac"), host_only=True),
-    Field(
-        "phone_ip",
-        "Phone IP  (phone only, e.g. 192.168.1.207)",
-        "",
-        host_only=True,
-        # Only relevant to the phone relay — hidden unless Camera == "phone". The operator
-        # types just the LAN IP: the host relay (scripts/run/camera-bridge.sh) appends the
-        # IP-webcam port (:8081) when none is given, so no port belongs here.
-        show_if=("camera", "phone"),
-    ),
     Field("rotate_deg", "Rotate clockwise (0/90/180/270)", "90"),
     Field("tracking_mode", "Tracking mode", "hand", choices=("hand", "full_body")),
     # Dataset capture: track both hands (control still uses the right hand) and take frames
