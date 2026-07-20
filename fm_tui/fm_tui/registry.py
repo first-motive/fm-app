@@ -429,15 +429,28 @@ _REMOTE_ROBOTS = (
     Robot(
         key="openarm",
         label="Enactic OpenArm",
-        variants=("right_arm",),
+        # right_arm mirrors the one control hand; default_bimanual mirrors BOTH hands
+        # onto BOTH arms (one mirror_source + pose_tracking per arm, each fed the rig's
+        # per-hand streams incl. per-hand metric depth /vision/<hand>/hand_point).
+        variants=("right_arm", "default_bimanual"),
         default_variant="right_arm",
-        variant_labels={"right_arm": "Right arm only"},
+        variant_labels={
+            "right_arm": "Right arm only",
+            "default_bimanual": "Both arms (bimanual)",
+        },
     ),
+)
+# gripper on/off drives the pinchers (hand open/close). Bimanual carries pinch grippers
+# on both arms in the model; gripper:=off just leaves them un-actuated. Single right_arm
+# upgrades to the pinch-gripper preset when on.
+_REMOTE_FIELDS = (
+    Field("gripper", "Gripper (pinchers)", "off", choices=("on", "off")),
 )
 _REMOTE_CLIENT = LaunchSpec(
     package="fm_bringup",
     launch_file="remote_client.launch.py",
     backend_arg="sim_backend",
+    fields=_REMOTE_FIELDS,
 )
 _REMOTE_MIRROR_MODE = Mode(
     key="remote_mirror",
