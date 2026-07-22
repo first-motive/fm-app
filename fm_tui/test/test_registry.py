@@ -71,12 +71,13 @@ def test_remote_mirror_mode_targets_the_remote_client_launch():
     assert rm.wired
     assert rm.launch.launch_file == "remote_client.launch.py"
     assert rm.has_backends
-    # Single-arm only — the rig tracks one hand.
+    # right_arm mirrors the one control hand; default_bimanual mirrors both hands.
     assert {r.key for r in rm.robots} == {"openarm"}
-    assert rm.robots[0].variants == ("right_arm",)
+    assert rm.robots[0].variants == ("right_arm", "default_bimanual")
+    assert rm.robots[0].default_variant == "right_arm"
     assert set(rm.backends) >= {"mujoco", "mock"}
-    # No form fields — it's rig-sourced (no local camera to configure).
-    assert not rm.launch.has_fields
+    # Rig-sourced (no local camera), but the gripper toggle rides as a form field.
+    assert [f.name for f in rm.launch.fields] == ["gripper"]
 
 
 def test_data_capture_is_wired_and_records():
