@@ -58,7 +58,7 @@ _AXOL_MESH_SUB = r'filename="package://fm_description/axol_description/'
 # only) rejects package:// paths through a dotted directory (e.g. the OpenArm's
 # openarm_v2.0), so nothing renders; [-\w.] admits the dot. send_buffer_limit is
 # raised above the 10 MB default for large body meshes.
-_DEFAULT_FOXGLOVE_PARAMS = {
+DEFAULT_FOXGLOVE_PARAMS = {
     "port": 8765,
     "address": "0.0.0.0",
     "send_buffer_limit": 134217728,
@@ -270,7 +270,7 @@ _ROBOTS = {
             },
         },
         standalone_cm_backends=frozenset({"mock", "real"}),
-        foxglove_params=_DEFAULT_FOXGLOVE_PARAMS,
+        foxglove_params=DEFAULT_FOXGLOVE_PARAMS,
         moveit_pkg="openarm_bimanual_moveit_config",
         moveit_cfg=os.path.join("config", "openarm_v2.0"),
         servo_config="servo.yaml",
@@ -390,7 +390,7 @@ _ROBOTS = {
         # real is the genuine feetech ros2_control plugin, so it needs a standalone
         # controller_manager just like mock (unlike the G1, whose real path is a bridge).
         standalone_cm_backends=frozenset({"mock", "real"}),
-        foxglove_params=_DEFAULT_FOXGLOVE_PARAMS,
+        foxglove_params=DEFAULT_FOXGLOVE_PARAMS,
         # SO101 MoveIt config is authored in-repo (Humble, bare joint names), so the
         # MoveIt files live under fm_bringup/config/so101 rather than a vendored package.
         moveit_pkg="fm_bringup",
@@ -429,7 +429,7 @@ _ROBOTS = {
         # so the real arm is driven by the Servo->arm_sdk bridge (g1_arm_sdk_bridge),
         # not a controller_manager. sim.launch therefore serves the sim backends only.
         standalone_cm_backends=frozenset({"mock"}),
-        foxglove_params=_DEFAULT_FOXGLOVE_PARAMS,
+        foxglove_params=DEFAULT_FOXGLOVE_PARAMS,
         # G1-D MoveIt config is authored in-repo (Humble, right-arm subset).
         moveit_pkg="fm_bringup",
         moveit_cfg=os.path.join("config", "g1_d"),
@@ -464,7 +464,7 @@ _ROBOTS = {
         # own. real is NOT here — Axol's CAN backend is deferred (no ros2_control plugin
         # yet), so sim.launch serves the sim backends only.
         standalone_cm_backends=frozenset({"mock"}),
-        foxglove_params=_DEFAULT_FOXGLOVE_PARAMS,
+        foxglove_params=DEFAULT_FOXGLOVE_PARAMS,
         # Axol MoveIt config is authored in-repo (Humble, bimanual 2x7-DOF).
         moveit_pkg="fm_bringup",
         moveit_cfg=os.path.join("config", "axol"),
