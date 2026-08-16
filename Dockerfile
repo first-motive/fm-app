@@ -24,17 +24,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Sim + teleop union: the MuJoCo and Gazebo ros2_control plugins, the ros_gz
 # bridge/sim pair, MoveIt + servo for teleop, and the headless GL stack (xvfb +
-# mesa) the simulators render against. All on the Humble apt mirror (gz libs via
-# the OSRF repo above) for both arm64 and amd64, so no source builds.
+# mesa) the simulators render against.
+#
+# packages.ros.org builds gz-ros2-control and ros-gz-sim for amd64 only — there is
+# no arm64 binary for either, so naming them unconditionally fails the arm64 leg of
+# the multi-arch build outright. MuJoCo (the backend the Apple Silicon path
+# actually runs), the ros_gz bridge, and MoveIt all ship arm64, so the split is by
+# package, not by dropping the arm64 image. Check with:
+#   curl -s http://packages.ros.org/ros2/ubuntu/dists/jammy/main/binary-arm64/Packages.gz \
+#     | gunzip | grep '^Package: ros-humble-ros-gz-sim$'
+# Drop the conditional once that returns a hit.
 #
 # x11vnc + websockify + novnc extend that headless X into the macOS rviz path:
 # rviz has no native Mac build and cannot render over XQuartz's indirect GLX on
 # Apple Silicon, so it renders against Xvfb with software GL (llvmpipe) and this
 # VNC bridge exports the framebuffer to the host browser (see scripts/rviz-vnc.sh).
+ARG TARGETARCH
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ros-humble-mujoco-ros2-control \
-      ros-humble-gz-ros2-control \
-      ros-humble-ros-gz-sim \
       ros-humble-ros-gz-bridge \
       ros-humble-moveit \
       ros-humble-moveit-servo \
@@ -44,6 +51,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       x11vnc \
       websockify \
       novnc \
+    && if [ "$TARGETARCH" = "amd64" ]; then \
+         apt-get install -y --no-install-recommends \
+           ros-humble-gz-ros2-control \
+           ros-humble-ros-gz-sim; \
+       else \
+         echo "skipping gz-ros2-control + ros-gz-sim: no arm64 build on packages.ros.org"; \
+       fi \
     && rm -rf /var/lib/apt/lists/*
 
 # Python deps colcon does not resolve: the MuJoCo physics engine the sim core
