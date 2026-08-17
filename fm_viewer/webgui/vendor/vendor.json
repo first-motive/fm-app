@@ -1,0 +1,54 @@
+{
+  "_comment": [
+    "Provenance for the third-party JavaScript this page ships. Every entry was",
+    "verified byte-identical to the published upstream artifact at the url below;",
+    "test/test_vendor.py re-checks the hashes offline on every colcon test.",
+    "See README.md in this directory for why these are vendored and pinned."
+  ],
+  "libraries": [
+    {
+      "file": "three.min.js",
+      "package": "three",
+      "version": "0.147.0",
+      "release": "r147",
+      "url": "https://unpkg.com/three@0.147.0/build/three.min.js",
+      "sha256": "f34446bf875b5fb0dcd93819ffe1d9e182d46634ee855f5d904c6c4ac7cdbc95",
+      "license": "MIT"
+    },
+    {
+      "file": "ColladaLoader.js",
+      "package": "three",
+      "version": "0.147.0",
+      "release": "r147",
+      "url": "https://unpkg.com/three@0.147.0/examples/js/loaders/ColladaLoader.js",
+      "sha256": "dadf486328a5d95f9bd09416b7810bd3a918bca58e384652d739aae21dd7b5a2",
+      "license": "MIT"
+    },
+    {
+      "file": "STLLoader.js",
+      "package": "three",
+      "version": "0.147.0",
+      "release": "r147",
+      "url": "https://unpkg.com/three@0.147.0/examples/js/loaders/STLLoader.js",
+      "sha256": "cb2e8a38636a690685d583544f2e3375c2f0545c68cd2ab3dfab51cd17f902a9",
+      "license": "MIT"
+    },
+    {
+      "file": "OrbitControls.js",
+      "package": "three",
+      "version": "0.147.0",
+      "release": "r147",
+      "url": "https://unpkg.com/three@0.147.0/examples/js/controls/OrbitControls.js",
+      "sha256": "b4c6e53f98538535b11fd6655627d47fb5877b3ad972568bff0a7026c4b6d5c4",
+      "license": "MIT"
+    },
+    {
+      "file": "URDFLoader.js",
+      "package": "urdf-loader",
+      "version": "0.12.1",
+      "url": "https://unpkg.com/urdf-loader@0.12.1/umd/URDFLoader.js",
+      "sha256": "1eeda5b0d2085fd18266d14481f33ce9a96c15745107a699916406e24ccacdbf",
+      "license": "Apache-2.0"
+    }
+  ]
+}
