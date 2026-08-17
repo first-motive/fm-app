@@ -33,6 +33,12 @@ jobs:
         with:
           path: src/fm-app
 
+      # The shared smoke asserts, run against the workspace this job builds.
+      - uses: actions/checkout@v7
+        with:
+          repository: first-motive/.github
+          path: .fm-ci
+
       - uses: actions/create-github-app-token@v3
         id: app-token
         with:
@@ -61,9 +67,12 @@ jobs:
         run: |
           source /opt/ros/humble/setup.bash
           # The Unitree message packages need the DDS IDL generator + CycloneDDS.
+          # ros2controlcli gives the smoke below `ros2 control list_controllers`,
+          # which is how it reads whether a controller reached `active`.
           apt-get install -y \
             ros-humble-rosidl-generator-dds-idl \
-            ros-humble-cyclonedds ros-humble-rmw-cyclonedds-cpp
+            ros-humble-cyclonedds ros-humble-rmw-cyclonedds-cpp \
+            ros-humble-ros2controlcli
           # Python deps colcon does not resolve: fm_tui's TUI framework + the sim
           # core's physics engine (matches docker/Dockerfile.base in fm-ros2), and
           # fm-tools — the shared wheel fm_tui imports (SHA-pinned == v0.1.0).
@@ -84,6 +93,36 @@ jobs:
           # Test only our packages — the built externals carry their own (upstream) tests.
           colcon test --packages-select $(colcon list --names-only | grep '^fm_')
           colcon test-result --verbose
+
+      # fm-app had no smoke at all: the image build stood in as one, which proves the
+      # container assembles, not that the stack runs. fm_bringup is where the layers
+      # actually meet, so this is the repo that can assert a controller reaching
+      # `active` — fm-robot owns the ros2_control xacros but launches no
+      # controller_manager, and fm-sim's loop has no controllers in it.
+      #
+      # This runs in build-test rather than a job of its own on purpose. The
+      # integration build pulls every sibling plus moveit and the Unitree messages;
+      # a separate smoke job would pay for all of it a second time to launch the
+      # workspace this job already built.
+      #
+      # so101 on the mock backend is the cheapest robot that exercises the full
+      # chain. The other three are covered by fm-ros2's ci-smoke.sh against the
+      # assembled workspace.
+      - name: Smoke bringup (controllers reach active)
+        timeout-minutes: 15
+        env:
+          LAUNCH: >-
+            ros2 launch fm_bringup sim.launch.py
+            robot:=so101 sim_backend:=mock use_foxglove:=false
+          EXPECT_NODES: /controller_manager /robot_state_publisher
+          EXPECT_CONTROLLERS: >-
+            joint_state_broadcaster so101_arm_controller so101_gripper_controller
+          EXPECT_TOPICS: /joint_states
+        run: |
+          set -eo pipefail
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          bash .fm-ci/scripts/ros2-smoke-assert.sh
 
   image:
     name: build + publish image (FROM fm-robot layer)
