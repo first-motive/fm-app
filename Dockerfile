@@ -45,6 +45,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       ros-humble-ros-gz-bridge \
       ros-humble-moveit \
       ros-humble-moveit-servo \
+      ros-humble-spacenav \
       xvfb \
       libgl1-mesa-dri \
       libglu1-mesa \
