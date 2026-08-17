@@ -810,21 +810,28 @@ function selectSession(id) {
   publishString("/capture/select", id);
 }
 
+// Escapes both arguments, so a caller cannot forget. Callers pass a mix of
+// page-authored labels, fmt()-coerced numbers, and raw fields off /capture/* —
+// s.rows reached innerHTML unescaped for exactly that reason. Escaping in the helper
+// makes the cell safe by construction rather than by every future call site
+// remembering. Callers therefore pass plain strings, never pre-escaped ones.
 const metric = (label, val, small) =>
-  '<div class="cell"><label>' + label + '</label><span class="v' + (small ? ' sm' : '') + '">' + val + '</span></div>';
+  '<div class="cell"><label>' + esc(label) + '</label><span class="v' + (small ? ' sm' : '') + '">' + esc(val) + '</span></div>';
 
 function renderRecDetail(d) {
   if (!d || d.session !== recSelected) return;    // ignore stale / other responses
   if (d.error) { recDetail.innerHTML = '<div class="rec-empty">error: ' + esc(d.error) + '</div>'; return; }
   const s = d.summary || {}, ser = d.series || {};
   const err = s.err_dist || {}, servo = s.servo || {}, grip = s.grip || {}, clamp = s.clamp || {};
+  // No esc() on the keys here: these strings go to metric(), which escapes. Escaping
+  // twice would render a literal &amp; to the operator.
   const servoStr = Object.keys(servo).length
-    ? Object.entries(servo).map(([k, v]) => esc(k) + " " + fmt(v) + "%").join("  ") : "—";
+    ? Object.entries(servo).map(([k, v]) => k + " " + fmt(v) + "%").join("  ") : "—";
   const gripStr = grip.mean != null
     ? "open " + fmt(grip.open_pct) + "%  close " + fmt(grip.close_pct) + "%  amb " + fmt(grip.amb_pct) + "%" : "—";
   const clampEntries = Object.entries(clamp).filter(([, v]) => v > 0);
   const clampStr = Object.keys(clamp).length
-    ? (clampEntries.length ? clampEntries.map(([k, v]) => esc(k) + " " + fmt(v) + "%").join("  ") : "none") : "—";
+    ? (clampEntries.length ? clampEntries.map(([k, v]) => k + " " + fmt(v) + "%").join("  ") : "none") : "—";
 
   recDetail.innerHTML =
     '<div class="sect-title">' + esc(d.session) + '</div>' +
