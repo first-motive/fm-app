@@ -34,9 +34,18 @@ LOCAL_IMAGE=fm-app:humble                          # locally-built tag for the c
 BAKED_IMAGE=ghcr.io/first-motive/fm-app:humble     # published image for the no-clone baked path
 LAUNCH=(ros2 run fm_tui fm_tui_launcher)           # the interactive TUI launcher
 FM_APP_RAW="https://raw.githubusercontent.com/first-motive/fm-app/main"
-# lib.sh is owned by fm-tools, fetched from a pinned release tag (the single
-# reuse home). The container runtime is delegated to fm-docker via install.sh.
-FM_TOOLS_RAW="https://raw.githubusercontent.com/first-motive/fm-tools/v0.2.0"
+# fm-render:begin fm-tools-pin sha256:5de9c0a921c441407f1aea8b6e32f37ca9d3f654d1116c636f0a7136da03b7d2 — rendered by the First Motive render plane — edit the upstream source, not this file
+# fm-tools owns both shared bootstrap pieces: lib.sh (fetched raw, before any
+# clone exists) and the fm_tools wheel (the shared TUI banner). Both come from
+# one pinned release tag — the single reuse home. Re-pin in the render plane,
+# never in a consumer. A host that needs only one of the two still carries both,
+# so the pin reads the same everywhere it appears; the disables below declare
+# that, rather than splitting the pin into two blocks that can disagree.
+# shellcheck disable=SC2034
+FM_TOOLS_RAW="https://raw.githubusercontent.com/first-motive/fm-tools/v0.4.1"
+# shellcheck disable=SC2034
+FM_TOOLS="fm-tools @ git+https://github.com/first-motive/fm-tools@v0.4.1"
+# fm-render:end fm-tools-pin
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/fm-app"
 # -----------------------------------------------------------------------------
 
@@ -54,11 +63,12 @@ else
   REPO_DIR=""
 fi
 
-# Load the shared bootstrap library (fm-tools lib.sh) for fm_detect_os /
-# fm_has_docker / fm_reattach_tty. Reuse a cached fetch, else fetch from the
-# pinned fm-tools tag and cache it. run.sh is itself curl|bash-able, so the
-# library may not be on disk. The checks must run in this shell, so source
-# rather than execute.
+# fm-render:begin bootstrap-load-lib sha256:c9083869d688439bdd976efb3448e42ccbf91515b92a95eda07a959e640f076d — rendered by the First Motive render plane — edit the upstream source, not this file
+# Load the shared bootstrap library (fm-tools lib.sh) for fm_detect_os,
+# fm_has_docker, and friends: reuse a cached fetch, else fetch from the pinned
+# fm-tools tag and cache it. This script is curl|bash-able, so the library may
+# not be on disk. The checks must run in this shell, so source rather than
+# execute. Needs FM_TOOLS_RAW and CACHE_DIR set above.
 load_lib() {
   local cached="$CACHE_DIR/lib.sh"
   if [ ! -f "$cached" ]; then
@@ -87,6 +97,7 @@ load_lib() {
   # shellcheck source=/dev/null
   source "$cached"
 }
+# fm-render:end bootstrap-load-lib
 
 usage() {
   cat <<'EOF'
