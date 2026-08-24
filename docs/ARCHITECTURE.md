@@ -37,11 +37,11 @@ Source: [`diagrams/launcher.d2`](diagrams/launcher.d2).
 control sits on it; manual (teleop) and autonomy (auto) layer on control; all
 command paths reach the hardware boundary.
 
-![bringup](diagrams/bringup.svg)
+![bringup composition](diagrams/bringup_composition.svg)
 
 The `Hardware Boundary` block is the seam into the robot layer — it expands in
 `fm-robot`'s [hardware diagram](https://github.com/first-motive/fm-robot/blob/main/docs/diagrams/hardware.svg).
-Source: [`diagrams/bringup.d2`](diagrams/bringup.d2).
+Source: [`diagrams/bringup_composition.d2`](diagrams/bringup_composition.d2).
 
 ## Launch Dependency Graph
 

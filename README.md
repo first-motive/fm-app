@@ -72,7 +72,7 @@ down the container with
 that resolves everything robot-specific and includes the lower layers (robot, sim,
 teleop).
 
-![bringup](docs/diagrams/bringup.svg)
+![bringup composition](docs/diagrams/bringup_composition.svg)
 
 Full launch graph, runtime data flow, and visualization:
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
