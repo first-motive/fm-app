@@ -24,8 +24,9 @@ composes live in sibling repos
 ## Launcher
 
 `fm_tui` walks a registry of action × robot × backend, then shells out the
-matching `ros2 launch` via `subprocess`. Three actions are wired; autonomous is a
-stub.
+matching `ros2 launch` via `subprocess`. Every action is wired; two of them —
+Data Capture and Autonomous — resolve against what is installed, so they degrade to
+the public path (or to a disabled stub) where the private overlay is absent.
 
 ![launcher](diagrams/launcher.svg)
 
@@ -60,7 +61,7 @@ flowchart TD
     tui -->|Robot Description| view["fm_description/<br/>view_robot.launch.py"]
     tui -->|Simulation| sim["fm_bringup/<br/>sim.launch.py"]
     tui -->|Teleop| teleop["fm_bringup/<br/>teleop.launch.py"]
-    tui -.->|Autonomous| stub(["stubbed — no launch"])
+    tui -.->|Autonomous| auto["fm_policy_serve/<br/>autonomous.launch.py<br/>(private overlay)"]
 
     %% sim subtree
     sim ==>|always| ctrl["fm_bringup/<br/>controllers.launch.py"]
@@ -103,7 +104,9 @@ package; everything else is first-party.
 | `view_robot.launch.py` | fm_description | — | robot_state_publisher; joint_state_publisher—; rviz2—; foxglove_bridge— |
 | `sim.launch.py` | fm_bringup | `controllers.launch.py` (always); one `fm_sim_backends/*` by `sim_backend` | robot_state_publisher; foxglove_bridge—; joint_state_publisher—; ros2_control_node— |
 | `controllers.launch.py` | fm_bringup | — | controller_manager/spawner; ros2_control_node— (`use_standalone_cm`) |
-| `teleop.launch.py` | fm_bringup | `servo.launch.py` (always) | input adapter by `input`; registry `teleop_nodes` |
+| `teleop.launch.py` | fm_bringup | `servo.launch.py` (except `input:=mirror`, which runs `pose_tracking.launch.py`, and `input:=leader`, which runs neither) | input adapter by `input`; registry `teleop_nodes` |
+| `leader_session.launch.py` | fm_bringup | `sim.launch.py`; `teleop.launch.py input:=leader` | — |
+| `vr_session.launch.py` | fm_bringup | `sim.launch.py`; `teleop.launch.py input:=vr` | — |
 | `servo.launch.py` | fm_bringup | — | moveit_servo/servo_node_main (per arm) + start_servo trigger |
 | `mujoco.launch.py` | fm_sim_backends | — | mujoco_ros2_control/ros2_control_node (`xvfb-run`) |
 | `gazebo.launch.py` | fm_sim_backends | `gz_sim.launch.py` (external) | ros_gz_sim/create; ros_gz_bridge/parameter_bridge |
@@ -165,9 +168,11 @@ sequenceDiagram
     Back-->>Viz: /joint_states
 ```
 
-Teleop input is pluggable — `teleop.launch.py input:=foxglove|joy|spacenav` swaps
-the adapter, but every adapter normalizes to the same `delta_twist_cmds` topic, so
-nothing downstream changes. The adapters and servo wiring live in
+Teleop input is pluggable — `teleop.launch.py input:=foxglove|joy|spacenav|vision|vr`
+swaps the adapter, but every adapter normalizes to the same `delta_twist_cmds` topic, so
+nothing downstream changes. Two inputs deliberately leave that path: `mirror` drives an
+absolute pose target through PoseTracking, and `leader` streams a full trajectory to the
+arm controller, bypassing Servo entirely. The adapters and servo wiring live in
 [`fm-teleop`](https://github.com/first-motive/fm-teleop).
 
 ## Visualization

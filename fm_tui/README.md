@@ -35,9 +35,10 @@ registry.py (data) ──► launcher.py (Textual menu) ──► ros2 launch �
 ros2 run fm_tui fm_tui_launcher
 ```
 
-Selecting a variant exits the UI and hands the terminal to the launch. Today
-Robot Description is wired (to `fm_description view_robot.launch.py`); Teleop and
-Autonomous render as disabled stubs until their launch graphs land.
+Selecting a variant exits the UI and hands the terminal to the launch. Every action
+carries a launch graph today. Autonomous is the one that depends on what is installed:
+its launch lives in the private `fm_policy_serve`, so it renders as a disabled stub in a
+public checkout and is wired wherever that package is present.
 
 `registry.py` is the single source of truth for the **menu**; the launch file
 owns the **dispatch params**. `scripts/view-robot.sh` drives the same launch file

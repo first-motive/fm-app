@@ -18,39 +18,26 @@ host's built-in webcam); a device index or stream URL also works. In Foxglove St
 ws://localhost:8765 and import foxglove/mirror_teleop.json (Layouts -> Import from file).
 """
 
-import os
-
 import yaml
 
-from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
     ExecuteProcess,
-    IncludeLaunchDescription,
     OpaqueFunction,
     TimerAction,
 )
 from launch.conditions import IfCondition
-from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 from fm_bringup import registry
+from fm_bringup.sessions import include as _include
 
 # Launch args forwarded verbatim into teleop.launch.py's mirror branch. Empty values keep the
 # robot's vision.yaml / node defaults (teleop.launch.py only overrides when the arg is non-empty).
 _TELEOP_FORWARD = ("camera_source", "rotate_deg", "publish_debug_image", "tracking_mode",
                    "hand_span_m", "capture_hands", "record_skeleton", "camera_input")
-
-
-def _include(name, launch_arguments):
-    return IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(get_package_share_directory("fm_bringup"), "launch", name)
-        ),
-        launch_arguments=launch_arguments.items(),
-    )
 
 
 def _launch_setup(context, *args, **kwargs):

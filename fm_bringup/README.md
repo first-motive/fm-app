@@ -23,7 +23,11 @@ launch/
   bringup.launch.py             foxglove_bridge + control stub
   sim.launch.py                 unified sim: robot + variant + sim_backend
   servo.launch.py               MoveIt Servo for the robot's arm group
-  teleop.launch.py              Servo + selected input (foxglove | joy | spacenav)
+  teleop.launch.py              Servo + selected input (foxglove | joy | spacenav |
+                                vision | mirror | leader | vr)
+  leader_session.launch.py      sim + leader-follower teleop (no Servo — the leader
+                                bypass streams to the arm controller)
+  vr_session.launch.py          sim + Servo + the VR controller source
   controllers.launch.py         reusable controller spawners (+ optional standalone CM)
 ```
 

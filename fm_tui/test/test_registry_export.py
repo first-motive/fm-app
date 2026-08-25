@@ -12,7 +12,7 @@ Two guarantees an out-of-process front end depends on:
 import json
 
 from fm_tui import config
-from fm_tui.registry import actions
+from fm_tui.registry import _has_package, actions
 from fm_tui.registry_export import SCHEMA_VERSION, to_dict, to_json
 
 
@@ -38,9 +38,10 @@ def test_wired_and_stub_split_survives():
     by_key = {a["key"]: a for a in _roundtrip()["actions"]}
     assert by_key["robot_description"]["wired"] is True
     assert by_key["robot_description"]["launch"] is not None
-    assert by_key["autonomous"]["wired"] is False
-    assert by_key["autonomous"]["launch"] is None
-    assert by_key["autonomous"]["robots"] == []
+    # autonomous is wired only where the private policy layer is installed.
+    wired = _has_package("fm_policy_serve")
+    assert by_key["autonomous"]["wired"] is wired
+    assert (by_key["autonomous"]["launch"] is not None) is wired
 
 
 def test_robots_variants_and_defaults_round_trip():
@@ -87,6 +88,7 @@ def test_teleoperation_group_serialises_its_modes():
         "vision_mirror",
         "remote_mirror",
         "leader_follower",
+        "vr",
     ]
     assert all(m["launch"] is not None for m in teleop["modes"])
 

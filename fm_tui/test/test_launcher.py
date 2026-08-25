@@ -6,6 +6,8 @@ value (the ``ros2 launch`` argv), never by running it.
 
 import asyncio
 
+import pytest
+
 from textual.widgets import Button, ListView
 
 from textual.color import Color
@@ -14,7 +16,7 @@ from fm_tools.tui import Header, palette
 from fm_tui import config
 from fm_tui import launcher
 from fm_tui.launcher import FmLauncherApp, main
-from fm_tui.registry import action, actions
+from fm_tui.registry import _has_package, action, actions
 
 
 async def _walk_to_vision_form(pilot):
@@ -85,9 +87,10 @@ def test_menu_builds_from_registry():
             await pilot.pause()
             menu = pilot.app.query_one("#menu", ListView)
             assert len(menu) == len(actions())
-            # Only autonomous remains a stub; it carries the disabled class.
+            # autonomous is the only stub, and only while the private policy layer
+            # is absent; installed, it is wired like any other action.
             stub_count = sum("stub" in item.classes for item in menu.children)
-            assert stub_count == 1
+            assert stub_count == (0 if _has_package("fm_policy_serve") else 1)
 
     asyncio.run(go())
 
@@ -252,6 +255,10 @@ def test_back_from_pub_returns_to_actions():
     asyncio.run(go())
 
 
+@pytest.mark.skipif(
+    _has_package("fm_policy_serve"),
+    reason="autonomous is wired when the policy layer is installed, so no stub remains",
+)
 def test_stub_does_not_dispatch():
     async def go():
         async with FmLauncherApp().run_test() as pilot:
