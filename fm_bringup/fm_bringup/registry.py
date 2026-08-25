@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import xacro
+import yaml
 from ament_index_python.packages import get_package_share_directory
 
 from fm_sim_models.models import mjcf_path
@@ -179,6 +180,34 @@ class RobotSpec:
         rotate_deg, mirror_gain, workspace box). May not exist for every robot; callers
         guard with os.path.exists and fall back to the node defaults."""
         return self._config("vision.yaml")
+
+    def arm_controllers(self, variant):
+        """Return ``[(controller_name, [joint, ...]), ...]`` for the variant's arm JTCs.
+
+        The leader-bypass path streams a trajectory straight to an arm controller, so it
+        needs the controller's topic and its joint order. Both are read from the same
+        controllers.yaml the controller_manager loads, rather than restated here, so the
+        leader source can never command a stale joint order.
+
+        Arm controllers are the active ones named ``*_arm_controller``; grippers, hands,
+        and the base are excluded. Multi-arm variants return one entry per arm, in the
+        registry's declared order.
+        """
+        if variant not in self.controllers:
+            raise ValueError(
+                f"{self.key}: no controllers for variant {variant!r}. One of: "
+                f"{', '.join(sorted(self.controllers))}."
+            )
+        with open(self.controllers_file(variant), "r") as handle:
+            config = yaml.safe_load(handle)
+        names = [
+            name
+            for name in self.controllers[variant]["active"]
+            if name.endswith("_arm_controller")
+        ]
+        return [
+            (name, list(config[name]["ros__parameters"]["joints"])) for name in names
+        ]
 
     def servo_nodes(self):
         """Return ``[(node_name, servo.yaml abs path), ...]`` — primary plus extras.

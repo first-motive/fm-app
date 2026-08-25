@@ -47,6 +47,27 @@ def test_controllers_file_path_per_variant():
     assert path.endswith("config/openarm/right_arm.controllers.yaml")
 
 
+def test_arm_controllers_reads_the_yaml_the_controller_manager_loads():
+    # The leader bypass streams to an arm controller, so its topic and joint order come
+    # from this one file — never restated in a launch argument.
+    arms = registry.get("so101").arm_controllers("so101")
+    assert arms == [
+        (
+            "so101_arm_controller",
+            ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll"],
+        )
+    ]
+
+
+def test_arm_controllers_excludes_grippers_and_returns_one_entry_per_arm():
+    arms = registry.get("openarm").arm_controllers("default_bimanual")
+    assert [name for name, _ in arms] == [
+        "openarm_left_arm_controller",
+        "openarm_right_arm_controller",
+    ]
+    assert all(joints for _, joints in arms)
+
+
 def test_srdf_selection():
     spec = registry.get("openarm")
     # right_arm is served in-repo; other variants fall back to the MoveIt config.

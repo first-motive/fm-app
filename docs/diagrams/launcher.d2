@@ -23,13 +23,14 @@ teleop: "" {
   class: block
   r: Teleop { class: role }
   p: fm_teleop { class: pkg }
-  a: teleop.launch.py { class: art }
+  a: "*_session.launch.py -> teleop.launch.py" { class: art }
 }
 auto: "" {
-  grid-rows: 2
+  grid-rows: 3
   class: block
   r: Auto { class: role }
-  p: learning overlay · private { class: pkg }
+  p: fm_policy_serve · private { class: pkg }
+  a: autonomous.launch.py { class: art }
 }
 
 tui -> view

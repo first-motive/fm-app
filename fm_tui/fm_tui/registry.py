@@ -13,10 +13,13 @@ Three kinds of action live side by side:
   converges on the same ``fm_description view_robot.launch.py`` that ``scripts/view-robot.sh``
   drives from the host, so the two entry points stay decoupled.
 - **Mode groups** carry ``launch=None`` but a non-empty ``modes`` tuple (``teleoperation``:
-  Vision Mirror / Leader-Follower). The launcher inserts a mode-selection step; the chosen
-  :class:`Mode` supplies the launch spec, robots, and backends from the robot step onward.
-- **Stub** actions (``autonomous``) carry ``launch=None`` and no modes, and render disabled.
-  They mark planned surface so the menu shape is stable before the launch graph exists.
+  Vision Mirror / Remote Mirror / Leader-Follower / VR Controller). The launcher inserts a
+  mode-selection step; the chosen :class:`Mode` supplies the launch spec, robots, and
+  backends from the robot step onward.
+- **Stub** actions carry ``launch=None`` and no modes, and render disabled. They mark
+  planned surface so the menu shape is stable before the launch graph exists.
+  ``autonomous`` is a stub only where the private ``fm_policy_serve`` is absent; installed,
+  it is wired like any other action.
 
 Robot and variant lists mirror ``fm_description``'s ``view_robot.launch.py``
 registry. The duplication is deliberate for v1 — the launch file owns dispatch
@@ -331,12 +334,6 @@ _SIM = LaunchSpec(
     launch_file="sim.launch.py",
     backend_arg="sim_backend",
 )
-_TELEOP = LaunchSpec(
-    package="fm_bringup",
-    launch_file="teleop.launch.py",
-    backend_arg="sim_backend",
-)
-
 # Vision 1:1 hand-mirror teleop: one launch stands up sim + mirror teleop + recorder + reset
 # (vision_session.launch.py). A few tuning knobs are collected in a form step; every field
 # name must match a vision_session launch arg. Mirror teleop is openarm/right_arm only today.
@@ -412,10 +409,31 @@ _VISION_MODE = Mode(
     robots=_VISION_ROBOTS,
     backends=_VISION_BACKENDS,
 )
+# Leader-follower and VR each get a session launch that composes the sim with the teleop
+# graph for their input. A mode cannot pass a fixed launch argument (LaunchSpec builds argv
+# from robot/variant/backend/fields only), so the input lives in the launch file's name
+# rather than in a form field the operator would have to answer.
+_LEADER = LaunchSpec(
+    package="fm_bringup",
+    launch_file="leader_session.launch.py",
+    backend_arg="sim_backend",
+)
 _LEADER_FOLLOWER_MODE = Mode(
     key="leader_follower",
     label="Leader-Follower",
-    launch=_TELEOP,
+    launch=_LEADER,
+    robots=_SIM_ROBOTS,
+    backends=_SIM_BACKENDS,
+)
+_VR = LaunchSpec(
+    package="fm_bringup",
+    launch_file="vr_session.launch.py",
+    backend_arg="sim_backend",
+)
+_VR_MODE = Mode(
+    key="vr",
+    label="VR Controller",
+    launch=_VR,
     robots=_SIM_ROBOTS,
     backends=_SIM_BACKENDS,
 )
@@ -484,6 +502,40 @@ _FM_DATA = LaunchSpec(
 )
 
 
+# Autonomous: a trained checkpoint drives the arm through the same Servo the operator
+# jogs. The launch lives in fm_policy_serve, which is private and absent from a public
+# checkout, so the action is wired only where that package is installed — the same
+# presence test Data Capture uses for the fm_data overlay. The server starts disengaged;
+# publishing on /policy_server/enable is what hands it the arm.
+_AUTONOMOUS = LaunchSpec(
+    package="fm_policy_serve",
+    launch_file="autonomous.launch.py",
+    backend_arg="sim_backend",
+    fields=(
+        Field(
+            "policy_type",
+            "Policy",
+            "zero",
+            choices=("zero", "lerobot"),
+        ),
+        Field("checkpoint", "Checkpoint directory (lerobot only)", ""),
+    ),
+)
+
+
+def _autonomous_action() -> Action:
+    """The Autonomous action: wired when the policy layer is installed, else a stub."""
+    if not _has_package("fm_policy_serve"):
+        return Action(key="autonomous", label="Autonomous")
+    return Action(
+        key="autonomous",
+        label="Autonomous",
+        launch=_AUTONOMOUS,
+        robots=_SIM_ROBOTS,
+        backends=_SIM_BACKENDS,
+    )
+
+
 def _data_capture_launch() -> LaunchSpec:
     """The Data Capture launch: fm_data dataset tooling when installed, else the vision session
     with the recorder forced on."""
@@ -501,7 +553,7 @@ ACTIONS: tuple[Action, ...] = (
     Action(
         key="teleoperation",
         label="Teleoperation",
-        modes=(_VISION_MODE, _REMOTE_MIRROR_MODE, _LEADER_FOLLOWER_MODE),
+        modes=(_VISION_MODE, _REMOTE_MIRROR_MODE, _LEADER_FOLLOWER_MODE, _VR_MODE),
     ),
     # Control action (no launch): start/stop an episode on the remote recorder rig. The
     # rig runs the camera + recorder headless; this publishes /capture/record (Bool) so
@@ -512,8 +564,7 @@ ACTIONS: tuple[Action, ...] = (
         label="Record Episode",
         pub=PubSpec(topic="/capture/record"),
     ),
-    # Stub — planned surface, no launch graph yet. launch=None renders disabled.
-    Action(key="autonomous", label="Autonomous"),
+    _autonomous_action(),
     Action(
         key="simulation",
         label="Simulation",

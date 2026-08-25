@@ -1,6 +1,6 @@
 """Registry tests: structure is valid and the wired/mode-group/stub split holds."""
 
-from fm_tui.registry import ACTIONS, Robot, action, actions
+from fm_tui.registry import ACTIONS, Robot, _has_package, action, actions
 
 
 def _mode(action_key, mode_key):
@@ -25,11 +25,20 @@ def test_robot_description_is_wired_with_robots():
     assert {r.key for r in rd.robots} == {"g1_d", "so101", "openarm", "axol"}
 
 
-def test_autonomous_is_a_stub():
+def test_autonomous_follows_the_policy_layer():
+    # The autonomous launch lives in fm_policy_serve, which is private and absent from a
+    # public checkout: the action is wired exactly where that package is installed.
     entry = action("autonomous")
-    assert not entry.wired
-    assert entry.launch is None
-    assert entry.robots == ()
+    if _has_package("fm_policy_serve"):
+        assert entry.wired
+        assert entry.launch.launch_file == "autonomous.launch.py"
+        assert entry.launch.package == "fm_policy_serve"
+        assert [f.name for f in entry.launch.fields] == ["policy_type", "checkpoint"]
+        assert entry.robots
+    else:
+        assert not entry.wired
+        assert entry.launch is None
+        assert entry.robots == ()
 
 
 def test_simulation_is_wired_with_backends():
@@ -52,6 +61,7 @@ def test_teleoperation_is_a_mode_group():
         "vision_mirror",
         "remote_mirror",
         "leader_follower",
+        "vr",
     ]
     # Every mode is wired and keeps the backend step.
     for mode in entry.modes:
@@ -59,11 +69,19 @@ def test_teleoperation_is_a_mode_group():
         assert mode.has_backends
 
 
-def test_leader_follower_mode_carries_the_teleop_launch():
+def test_leader_follower_mode_carries_its_session_launch():
+    # A mode cannot pass a fixed launch argument, so the input lives in the launch file.
     lf = _mode("teleoperation", "leader_follower")
-    assert lf.launch.launch_file == "teleop.launch.py"
+    assert lf.launch.launch_file == "leader_session.launch.py"
     assert {r.key for r in lf.robots} == {"openarm", "so101", "g1_d", "axol"}
     assert "mujoco" in lf.backends
+
+
+def test_vr_mode_carries_its_session_launch():
+    vr = _mode("teleoperation", "vr")
+    assert vr.launch.launch_file == "vr_session.launch.py"
+    assert {r.key for r in vr.robots} == {"openarm", "so101", "g1_d", "axol"}
+    assert "mujoco" in vr.backends
 
 
 def test_remote_mirror_mode_targets_the_remote_client_launch():

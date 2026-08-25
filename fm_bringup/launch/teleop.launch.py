@@ -17,6 +17,13 @@ to stream to.
                Engage from the panel's "Vision (hold)" button. Needs the MediaPipe
                model (fm_teleop_vision/scripts/download_model.sh) and a camera — pass
                camera_source:=<index|url> (default 0, the host webcam).
+    leader     leader_source: a physical leader arm's joints drive the follower's arm
+               controller directly. This is the one input that runs NO Servo — the
+               trajectory bypasses it — so the source owns the motion bounds. In sim,
+               any publisher on leader_topic stands in for the arm.
+    vr         vr_source: a tracked VR controller jogs the arm through Servo, drives
+               the base from its thumbstick, and opens/closes the hand from its grip.
+               Needs a VR bridge publishing PoseStamped + Joy.
 """
 
 import os
@@ -32,7 +39,26 @@ from launch_ros.actions import Node
 
 from fm_bringup import registry
 
-_VALID_INPUTS = ("foxglove", "joy", "spacenav", "vision", "mirror")
+_VALID_INPUTS = ("foxglove", "joy", "spacenav", "vision", "mirror", "leader", "vr")
+
+
+def _command_frame(robot):
+    """Read the robot's Servo command frame from the same servo.yaml Servo itself loads.
+
+    A source's twist must be stamped in that frame, and it differs per robot
+    (openarm_right_base_link, base_link, torso_link). Reading it here rather than
+    restating it keeps the two from drifting.
+    """
+    servo_yaml = registry.get(robot).servo_params_file()
+    try:
+        with open(servo_yaml) as servo_file:
+            servo_cfg = yaml.safe_load(servo_file)
+        return servo_cfg["moveit_servo"]["robot_link_command_frame"]
+    except (OSError, KeyError, TypeError) as exc:
+        raise RuntimeError(
+            f"Could not read robot_link_command_frame from {servo_yaml} for robot "
+            f"'{robot}': {exc}. A jog twist must be stamped in that frame."
+        ) from exc
 
 
 def _launch_setup(context, *args, **kwargs):
@@ -66,9 +92,12 @@ def _launch_setup(context, *args, **kwargs):
         )
 
     # mirror drives an ABSOLUTE EE pose target (1:1 hand mirroring), so it runs the
-    # PoseTracking node — which embeds its own Servo — INSTEAD of servo_node. Every other
-    # input jogs via servo_node. Exactly one of the two owns the arm's JTC at a time.
-    if bimanual_arms:
+    # PoseTracking node — which embeds its own Servo — INSTEAD of servo_node. leader
+    # streams a full trajectory to the arm controller and runs NEITHER. Every other input
+    # jogs via servo_node. Exactly one writer owns the arm's JTC at a time.
+    if teleop_input == "leader":
+        nodes = []
+    elif bimanual_arms:
         nodes = [_pose_tracking({
             "arm_ns": arm["ns"], "move_group": arm["move_group"],
             "command_frame": arm["command_frame"], "ee_frame": arm["ee_frame"],
@@ -87,7 +116,51 @@ def _launch_setup(context, *args, **kwargs):
             )
         ]
 
-    if teleop_input == "joy":
+    if teleop_input == "leader":
+        # The follower's controller identity comes from the registry (which reads the same
+        # controllers.yaml the controller_manager loads), never from an operator-typed
+        # topic — a stale joint order would command the wrong joints. Unlike the servo
+        # path, which forwards an empty variant for servo.launch.py to resolve, the lookup
+        # happens here: the registry is keyed by concrete variant.
+        resolved_variant = variant or spec_top.default_variant
+        arms = spec_top.arm_controllers(resolved_variant)
+        if not arms:
+            raise RuntimeError(
+                f"Robot '{robot}' variant '{resolved_variant}' has no arm controller for "
+                "the leader bypass."
+            )
+        leader_arm = LaunchConfiguration("leader_arm").perform(context)
+        selected = next((arm for arm in arms if arm[0] == leader_arm), None) if leader_arm else arms[0]
+        if selected is None:
+            raise RuntimeError(
+                f"leader_arm '{leader_arm}' is not an arm controller of '{robot}' "
+                f"variant '{resolved_variant}'. One of: {', '.join(name for name, _ in arms)}."
+            )
+        controller, joints = selected
+        nodes += [
+            Node(
+                package="fm_teleop_leader",
+                executable="leader_source",
+                output="screen",
+                parameters=[{
+                    "command_topic": f"/{controller}/joint_trajectory",
+                    "joints": joints,
+                    "leader_joint_states_topic": LaunchConfiguration(
+                        "leader_topic"
+                    ).perform(context),
+                }],
+            ),
+        ]
+    elif teleop_input == "vr":
+        nodes += [
+            Node(
+                package="fm_teleop_vr",
+                executable="vr_source",
+                output="screen",
+                parameters=[{"command_frame": _command_frame(robot)}],
+            ),
+        ]
+    elif teleop_input == "joy":
         nodes += [
             Node(package="joy", executable="joy_node", output="screen"),
             Node(package="fm_teleop_device", executable="joy_to_servo", output="screen"),
@@ -111,21 +184,7 @@ def _launch_setup(context, *args, **kwargs):
         }
         if model_path:
             vision_params["model_path"] = model_path
-        # The published twist must be stamped in the robot's Servo command frame, which
-        # differs per robot (openarm_right_base_link, base_link, torso_link). Read it from
-        # the same servo.yaml Servo itself loads, so the two never drift.
-        servo_yaml = registry.get(robot).servo_params_file()
-        try:
-            with open(servo_yaml) as servo_file:
-                servo_cfg = yaml.safe_load(servo_file)
-            vision_params["command_frame"] = servo_cfg["moveit_servo"][
-                "robot_link_command_frame"
-            ]
-        except (OSError, KeyError, TypeError) as exc:
-            raise RuntimeError(
-                f"Could not read robot_link_command_frame from {servo_yaml} for robot "
-                f"'{robot}': {exc}. The vision twist must be stamped in that frame."
-            ) from exc
+        vision_params["command_frame"] = _command_frame(robot)
         nodes += [
             Node(
                 package="fm_teleop_vision",
@@ -288,7 +347,20 @@ def generate_launch_description():
                 "input",
                 default_value="foxglove",
                 description="foxglove | joy | spacenav | vision (wrist jog) | mirror "
-                "(1:1 hand mirroring via PoseTracking).",
+                "(1:1 hand mirroring via PoseTracking) | leader (leader arm, bypasses "
+                "Servo) | vr (tracked controller).",
+            ),
+            DeclareLaunchArgument(
+                "leader_topic",
+                default_value="/leader/joint_states",
+                description="leader input only: the leader arm's JointState topic. In sim "
+                "any publisher on it stands in for the arm.",
+            ),
+            DeclareLaunchArgument(
+                "leader_arm",
+                default_value="",
+                description="leader input only: which arm controller the leader drives on a "
+                "multi-arm variant. Empty takes the first.",
             ),
             DeclareLaunchArgument(
                 "camera_source",
