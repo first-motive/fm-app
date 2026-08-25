@@ -270,7 +270,9 @@ def _launch_setup(context, *args, **kwargs):
             source_overrides["hand_span_m"] = 0.26
 
         hand_tracker_node = Node(
-            package="fm_teleop_vision",
+            # The tracker runs on the capture rig and lives beside the data engine, so
+            # provisioning a recorder never builds the teleop stack.
+            package="fm_data_perception",
             executable="hand_tracker",
             name="hand_tracker",
             output="screen",
