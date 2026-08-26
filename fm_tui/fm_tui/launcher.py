@@ -13,7 +13,7 @@ for wired actions::
     ┃   Simulation                      ┃
     ┃   Data Capture                    ┃
     ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-    Footer   [Q] QUIT   [ESC] BACK   [V] VIEWER: foxglove
+    Footer   [Q] QUIT  [ESC] BACK  [V] VIEWER: foxglove  [C] COMMS: zenoh
 
 Dispatch handoff: selecting a variant exits the Textual app with the ``ros2
 launch`` argv as its return value. :func:`main` then runs that command, so the
@@ -26,6 +26,13 @@ panel -> …), shown in the footer beside QUIT/BACK as ``VIEWER: <viewer>`` (its
 binding label, refreshed on toggle). The choice persists through
 :mod:`fm_tui.config` and rides into the ``robot_description`` dispatch as
 ``use_foxglove`` / ``use_rviz`` flags (panel keeps the bridge up like foxglove).
+
+Transport: the ``C`` hotkey cycles this host's transport (zenoh <-> dds-lan),
+shown as ``COMMS: <transport>``. Unlike the viewer it does not take effect in
+this session — it records a request that ``./run.sh`` applies on the next launch,
+because the transport is a fact on the machine's identity card and the launcher
+usually runs inside a container that cannot write it. While a request is pending
+the label reads ``COMMS: zenoh > dds-lan`` to say so.
 
 Widgets come from the theming layer (:mod:`fm_tools.tui`) so the launcher shares
 the monitor's look, themed or bare.
@@ -95,6 +102,10 @@ class FmLauncherApp(App):
         # Sits in the footer beside QUIT/BACK; its label carries the live viewer
         # (VIEWER: <viewer>), refreshed on toggle via _refresh_viewer_binding.
         Binding("v", "toggle_viewer", "VIEWER"),
+        # Same shape as VIEWER, one step removed: its label carries the live
+        # transport, and pressing it records a request rather than changing this
+        # session (see action_toggle_transport).
+        Binding("c", "toggle_transport", "COMMS"),
     ]
     CSS = f"""
     Screen {{
@@ -157,6 +168,11 @@ class FmLauncherApp(App):
         # The standing viewer default, loaded from the persisted config. The `v`
         # binding flips and re-persists it; _dispatch reads it at launch time.
         self._viewer = config.get_viewer()
+        # What this session is actually running on, and what has been asked for
+        # instead. They are separate because a transport change cannot take
+        # effect until run.sh has re-resolved it from the identity card.
+        self._transport = config.active_transport()
+        self._pending_transport = config.get_pending_transport()
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -166,6 +182,7 @@ class FmLauncherApp(App):
 
     def on_mount(self) -> None:
         self._refresh_viewer_binding()
+        self._refresh_transport_binding()
         self._rebuild()
 
     def _refresh_viewer_binding(self) -> None:
@@ -176,6 +193,25 @@ class FmLauncherApp(App):
                 binding, description=f"VIEWER: {self._viewer}"
             )
             self.refresh_bindings()
+
+    def _refresh_transport_binding(self) -> None:
+        """Show the transport in the footer's C key label (``COMMS: <x>``).
+
+        A pending request is rendered as ``running > requested`` rather than as
+        the requested value alone: showing only what was asked for would claim a
+        change that has not happened yet, which is how an operator ends up
+        recording a take on the middleware they thought they had left.
+        """
+        binding = self._bindings.keys.get("c")
+        if binding is None:
+            return
+        label = self._transport
+        if self._pending_transport is not None:
+            label = f"{self._transport} > {self._pending_transport}"
+        self._bindings.keys["c"] = dataclasses.replace(
+            binding, description=f"COMMS: {label}"
+        )
+        self.refresh_bindings()
 
     # --- menu construction -------------------------------------------------
 
@@ -367,6 +403,31 @@ class FmLauncherApp(App):
             self.exit(None)
             return
         self._rebuild()
+
+    def action_toggle_transport(self) -> None:
+        """Cycle the requested transport, relabel, and record it for run.sh.
+
+        Deliberately does not change this session. The transport lives on the
+        machine's identity card, this process usually runs inside a container
+        that cannot write it, and a launch already in flight is on the middleware
+        it started with either way. The request is parked in the launcher's own
+        config — which sits on the mounted host repo root — and ``./run.sh``
+        applies it through the same writer the ``--comms`` flag uses.
+        """
+        order = config.TRANSPORTS
+        current = self._pending_transport or self._transport
+        requested = order[(order.index(current) + 1) % len(order)]
+        config.set_pending_transport(requested)
+        self._pending_transport = config.get_pending_transport()
+        self._refresh_transport_binding()
+        if self._pending_transport is None:
+            self.notify(f"transport stays {self._transport}")
+        else:
+            self.notify(
+                f"transport {self._pending_transport} requested — "
+                "restart with ./run.sh to apply it",
+                severity="warning",
+            )
 
     def action_toggle_viewer(self) -> None:
         """Cycle the viewer default (foxglove -> rviz -> panel -> …), relabel, persist."""
