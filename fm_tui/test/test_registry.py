@@ -102,8 +102,10 @@ def test_data_capture_is_wired_and_records():
     entry = action("data_capture")
     assert entry.wired
     assert entry.has_backends
-    # fm_data is absent in this checkout, so it degrades to the vision session.
-    assert entry.launch.launch_file == "vision_session.launch.py"
+    expected_launch = (
+        "record.launch.py" if _has_package("fm_data") else "vision_session.launch.py"
+    )
+    assert entry.launch.launch_file == expected_launch
     # record:=true rides in the argv (the record field defaults "true").
     cmd = entry.launch.command("openarm", "right_arm", "mujoco")
     assert "record:=true" in cmd
