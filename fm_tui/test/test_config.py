@@ -64,3 +64,64 @@ def test_set_viewer_rejects_unknown(monkeypatch, tmp_path):
     except ValueError:
         return
     raise AssertionError("expected ValueError for unknown viewer")
+
+
+# --- transport ---------------------------------------------------------------
+#
+# The transport is not a preference like the viewer: it is a fact about the
+# machine that the launcher can only *request*. These cover the split — what is
+# running now comes from the environment run.sh exported, what was asked for
+# lives in the config file, and asking for what is already running records
+# nothing.
+
+
+def test_active_transport_reads_the_environment(monkeypatch):
+    monkeypatch.setenv("FM_COMMS_PROFILE", "dds-lan")
+    assert config.active_transport() == "dds-lan"
+
+
+def test_active_transport_defaults_when_unset(monkeypatch):
+    monkeypatch.delenv("FM_COMMS_PROFILE", raising=False)
+    assert config.active_transport() == "zenoh"
+
+
+def test_active_transport_ignores_an_unknown_value(monkeypatch):
+    monkeypatch.setenv("FM_COMMS_PROFILE", "carrier-pigeon")
+    assert config.active_transport() == "zenoh"
+
+
+def test_no_pending_transport_by_default(monkeypatch, tmp_path):
+    monkeypatch.setenv("FM_TUI_CONFIG", str(tmp_path / "cfg.json"))
+    assert config.get_pending_transport() is None
+
+
+def test_pending_transport_round_trips(monkeypatch, tmp_path):
+    monkeypatch.setenv("FM_TUI_CONFIG", str(tmp_path / "cfg.json"))
+    monkeypatch.setenv("FM_COMMS_PROFILE", "zenoh")
+    config.set_pending_transport("dds-lan")
+    assert config.get_pending_transport() == "dds-lan"
+
+
+def test_requesting_the_running_transport_clears_the_request(monkeypatch, tmp_path):
+    monkeypatch.setenv("FM_TUI_CONFIG", str(tmp_path / "cfg.json"))
+    monkeypatch.setenv("FM_COMMS_PROFILE", "zenoh")
+    config.set_pending_transport("dds-lan")
+    config.set_pending_transport("zenoh")
+    assert config.get_pending_transport() is None
+
+
+def test_pending_transport_preserves_the_viewer(monkeypatch, tmp_path):
+    monkeypatch.setenv("FM_TUI_CONFIG", str(tmp_path / "cfg.json"))
+    monkeypatch.setenv("FM_COMMS_PROFILE", "zenoh")
+    config.set_viewer("rviz")
+    config.set_pending_transport("dds-lan")
+    assert config.get_viewer() == "rviz"
+
+
+def test_set_pending_transport_rejects_unknown(monkeypatch, tmp_path):
+    monkeypatch.setenv("FM_TUI_CONFIG", str(tmp_path / "cfg.json"))
+    try:
+        config.set_pending_transport("bogus")
+    except ValueError:
+        return
+    raise AssertionError("expected ValueError for unknown transport")
