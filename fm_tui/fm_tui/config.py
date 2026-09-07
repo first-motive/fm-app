@@ -26,6 +26,27 @@ from pathlib import Path
 # The one preference v1 persists. Kept as a dict so more keys can join later.
 _DEFAULTS = {"viewer": "foxglove"}
 
+# The transports a host can speak. Mirrors the identity card's `transport` enum
+# and fm-comms' profile names, because these three must agree — a value the TUI
+# offers that the card refuses is a setting the operator cannot actually apply.
+#   zenoh     DDS on loopback, one bridge per host, one router. The default.
+#   dds-lan   FastDDS pinned to the LAN interface. The labelled escape hatch.
+TRANSPORTS = ("zenoh", "dds-lan")
+
+# Where a requested transport is parked until run.sh can apply it.
+#
+# The TUI does NOT write the identity card, and must not. The card is a fact
+# about the machine, living at /etc/fm/machine.json (or ~/.config on macOS), and
+# the launcher usually runs inside a container where that path is not mounted and
+# where writing it would mean writing the container's own filesystem — a setting
+# that vanishes on teardown while appearing to have been saved.
+#
+# So the launcher records a request here, in the config file that IS on the
+# mounted host repo root, and `./run.sh` applies it on the next launch through
+# the same single writer the `--comms` flag uses. One writer for the card, and a
+# TUI that can still change the setting from where it actually runs.
+_PENDING_TRANSPORT_KEY = "comms"
+
 # The viewers the launcher can dispatch. get_viewer() falls back to the default
 # for any value outside this set, so a hand-edited config can never wedge the UI.
 #   foxglove  the Foxglove desktop app over foxglove_bridge (:8765)
@@ -69,4 +90,39 @@ def set_viewer(viewer: str) -> None:
         raise ValueError(f"unknown viewer {viewer!r}; expected one of {VIEWERS}")
     data = load()
     data["viewer"] = viewer
+    save(data)
+
+
+def active_transport() -> str:
+    """Return the transport this process is actually running on.
+
+    Read from the environment rather than the config file: ``run.sh`` resolves the
+    host's transport from its identity card and exports ``FM_COMMS_PROFILE``, and
+    that resolved answer — not a preference written down somewhere — is what the
+    launch will speak. Absent (an ad-hoc run outside run.sh), the fleet default.
+    """
+    profile = os.environ.get("FM_COMMS_PROFILE", "")
+    return profile if profile in TRANSPORTS else TRANSPORTS[0]
+
+
+def get_pending_transport() -> str | None:
+    """Return the transport requested but not yet applied, or ``None``."""
+    value = load().get(_PENDING_TRANSPORT_KEY)
+    return value if value in TRANSPORTS else None
+
+
+def set_pending_transport(transport: str) -> None:
+    """Record a transport for ``run.sh`` to apply on the next launch.
+
+    Requesting the transport already in force clears the request instead of
+    recording a no-op, so toggling away and back leaves nothing behind for
+    run.sh to apply.
+    """
+    if transport not in TRANSPORTS:
+        raise ValueError(f"unknown transport {transport!r}; expected one of {TRANSPORTS}")
+    data = load()
+    if transport == active_transport():
+        data.pop(_PENDING_TRANSPORT_KEY, None)
+    else:
+        data[_PENDING_TRANSPORT_KEY] = transport
     save(data)
