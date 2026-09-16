@@ -61,6 +61,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
        fi \
     && rm -rf /var/lib/apt/lists/*
 
+# The rosbag2 storage plugin that opens MCAP bags. rosbag2 installs only its
+# sqlite3 plugin, so without this every rosbag2_py reader fails at open with
+# "Could not load/open plugin with storage id 'mcap'" — which is what the
+# processor's episode thumbnails and showcase export hit on this image, while
+# ingest kept working because it reads MCAP in pure Python instead.
+#
+# fm_data_record declares rosbag2_storage_mcap and fm_data_dataset exec_depends
+# on it, but this image does not run rosdep — it installs a hand-written list,
+# the same gap fm-robot's joint_state_publisher_gui line records. fm-ros2 runs
+# the processor on this image (lib-processor.sh), so the plugin belongs here.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ros-humble-rosbag2-storage-mcap \
+    && rm -rf /var/lib/apt/lists/*
+
 # Python deps colcon does not resolve: the MuJoCo physics engine the sim core
 # drives, textual — fm_tui's TUI framework — and fm-tools, the shared wheel that
 # carries fm_tui's brand, widgets, and pick menu (SHA-pinned git install == tag
