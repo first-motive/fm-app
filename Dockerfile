@@ -87,3 +87,18 @@ RUN pip install --no-cache-dir mujoco textual==0.74.0 \
 # pulls opencv (cv2) + protobuf/numpy, so it caches as its own layer. Pin needs an arm64
 # cp310 wheel (Ubuntu 22.04 / Python 3.10 on the linux/arm64 Mac target).
 RUN pip install --no-cache-dir mediapipe==0.10.14
+
+# Processor showcase export (lib-processor.sh runs it on this image): ffmpeg
+# encodes the episode video, rosbags reads the bag in pure Python, and jsonschema
+# backs annotation validation, and boto3 serves --upload (B2PublishStore); its
+# range matches requirements-showcase-publish.txt. Nothing is installed at run time.
+#
+# numpy is pinned to the version already on this image (2.2.6, the last release
+# supporting Python 3.10) and passed in the same resolve, so rosbags' numpy
+# requirement cannot upgrade or replace the one the ROS Python packages and
+# mediapipe were built against.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ffmpeg \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir numpy==2.2.6 jsonschema==4.25.1 rosbags==0.11.3 "boto3>=1.34" \
+    && python3 -c "import numpy; assert numpy.__version__ == '2.2.6', numpy.__version__"

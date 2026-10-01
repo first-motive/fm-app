@@ -66,6 +66,11 @@ container path runs it through an interactive `docker compose exec` (a tty). Tea
 down the container with
 `docker compose -f docker/compose.yaml -f docker/compose.macos.yaml down`.
 
+The same image runs the data processor's showcase export, so it also carries
+`ffmpeg` (apt) and `jsonschema==4.25.1` / `rosbags==0.11.3` / `boto3>=1.34` (pip;
+boto3 serves `--upload`) alongside the `rosbag2_storage_mcap` plugin; nothing is installed at run time.
+`numpy` stays at the ROS-compatible `2.2.6` on Humble's Python 3.10.
+
 ## Architecture
 
 `fm_tui` is the launcher an operator drives; `fm_bringup` is the composition root
