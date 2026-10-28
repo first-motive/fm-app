@@ -28,4 +28,5 @@ setup(
     maintainer_email="nish@ubundi.co.za",
     description="First Motive web viewer panel (Foxglove WS): 3D robot, camera feed, plots, recordings",
     license="Apache-2.0",
+    extras_require={"test": ["pytest"]},
 )

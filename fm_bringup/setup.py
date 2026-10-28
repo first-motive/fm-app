@@ -35,6 +35,7 @@ setup(
     maintainer_email="nish@ubundi.co.za",
     description="First Motive bringup: launch files and runtime configs",
     license="Apache-2.0",
+    extras_require={"test": ["pytest"]},
     entry_points={
         "console_scripts": [
             "bringup = fm_bringup.bringup:main",

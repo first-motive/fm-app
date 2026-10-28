@@ -25,6 +25,7 @@ setup(
     maintainer_email="nish@ubundi.co.za",
     description="First Motive terminal UI: a colour-coded ROS2 monitor, themed by nish-tui when present.",
     license="Apache-2.0",
+    extras_require={"test": ["pytest"]},
     entry_points={
         "console_scripts": [
             "fm_tui = fm_tui.app:main",
