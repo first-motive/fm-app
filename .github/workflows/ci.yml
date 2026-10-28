@@ -43,6 +43,7 @@ jobs:
     defaults:
       run:
         shell: bash
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
         with:
@@ -145,6 +146,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
 
