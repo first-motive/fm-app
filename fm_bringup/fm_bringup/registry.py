@@ -55,6 +55,13 @@ _G1_MESH_SUB = r'filename="package://fm_description/g1_d_description/meshes/'
 _AXOL_MESH_RE = re.compile(r'filename="package://assembly/')
 _AXOL_MESH_SUB = r'filename="package://fm_description/axol_description/'
 
+# The Panda's franka_description visuals are .dae; fm_description converts them to
+# STL under panda_meshes/ (same tree). Rewrite like the OpenArm so Foxglove renders —
+# matching the _build_panda rewrite in view_robot.launch.py. Collisions are already
+# STL and stay on franka_description.
+_PANDA_MESH_RE = re.compile(r"package://franka_description/meshes/([^\"']+?)\.dae")
+_PANDA_MESH_SUB = r"package://fm_description/panda_meshes/\1.stl"
+
 # foxglove_bridge params shared across robots: the default asset_uri_allowlist ([\w-]
 # only) rejects package:// paths through a dotted directory (e.g. the OpenArm's
 # openarm_v2.0), so nothing renders; [-\w.] admits the dot. send_buffer_limit is
@@ -505,6 +512,36 @@ _ROBOTS = {
         extra_servo_configs=(("servo_node_left", "servo_left.yaml"),),
         # Both arm controllers together claim all 14 revolute joints (the whole model),
         # so no extra joint_state_publisher is needed (unlike the G1-D's arm subset).
+        full_state_jsp=False,
+    ),
+    "panda": RobotSpec(
+        key="panda",
+        label="Franka Panda",
+        default_variant="panda",  # single fixed arm + hand configuration; nominal variant
+        control_xacro="panda.sim.urdf.xacro",
+        preset_arg=None,
+        mesh_rewrite=(_PANDA_MESH_RE, _PANDA_MESH_SUB),
+        config_dir="panda",
+        controllers={
+            "panda": {
+                "active": ["panda_arm_controller", "panda_gripper_controller"],
+                "inactive": ["panda_arm_forward_position_controller"],
+            },
+        },
+        # Only mock needs a standalone controller_manager; mujoco/gazebo/isaac host their
+        # own. real is NOT here — the Panda is a simulation-only robot (no hardware
+        # backend in panda.sim.urdf.xacro), so sim.launch serves the sim backends only.
+        standalone_cm_backends=frozenset({"mock"}),
+        foxglove_params=DEFAULT_FOXGLOVE_PARAMS,
+        # Panda MoveIt config is authored in-repo, seeded from the MoveIt panda config
+        # and re-keyed to franka_description's fer_* names.
+        moveit_pkg="fm_bringup",
+        moveit_cfg=os.path.join("config", "panda"),
+        servo_config="servo.yaml",
+        bringup_srdf={"panda": "panda.srdf"},
+        moveit_srdf="panda.srdf",
+        # The arm + hand controllers claim every actuated joint; the second finger is a
+        # URDF mimic, which MoveIt derives, so no extra joint_state_publisher is needed.
         full_state_jsp=False,
     ),
 }

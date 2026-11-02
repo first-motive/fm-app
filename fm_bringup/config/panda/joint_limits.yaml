@@ -1,0 +1,51 @@
+# Joint limits for the Panda, consumed by MoveIt Servo (robot_description_planning).
+#
+# Values mirror moveit_resources_panda_moveit_config, re-keyed to franka_description's
+# fer_* joint names. Velocities are Franka's datasheet maxima; accelerations are a
+# quarter of them. Servo uses these for joint_limit_margin slowdown near the bounds;
+# position bounds come from the URDF. fer_finger_joint2 is the URDF mimic of
+# fer_finger_joint1, so it carries no entry.
+default_velocity_scaling_factor: 0.5
+default_acceleration_scaling_factor: 0.5
+
+joint_limits:
+  fer_joint1:
+    has_velocity_limits: true
+    max_velocity: 2.175
+    has_acceleration_limits: true
+    max_acceleration: 3.75
+  fer_joint2:
+    has_velocity_limits: true
+    max_velocity: 2.175
+    has_acceleration_limits: true
+    max_acceleration: 1.875
+  fer_joint3:
+    has_velocity_limits: true
+    max_velocity: 2.175
+    has_acceleration_limits: true
+    max_acceleration: 2.5
+  fer_joint4:
+    has_velocity_limits: true
+    max_velocity: 2.175
+    has_acceleration_limits: true
+    max_acceleration: 3.125
+  fer_joint5:
+    has_velocity_limits: true
+    max_velocity: 2.61
+    has_acceleration_limits: true
+    max_acceleration: 3.75
+  fer_joint6:
+    has_velocity_limits: true
+    max_velocity: 2.61
+    has_acceleration_limits: true
+    max_acceleration: 5.0
+  fer_joint7:
+    has_velocity_limits: true
+    max_velocity: 2.61
+    has_acceleration_limits: true
+    max_acceleration: 5.0
+  fer_finger_joint1:
+    has_velocity_limits: true
+    max_velocity: 0.1
+    has_acceleration_limits: false
+    max_acceleration: 0.0

@@ -72,6 +72,7 @@ jobs:
           # Keep only the ament packages we build; ignore file-vendored externals.
           for d in external/*/; do touch "${d}COLCON_IGNORE"; done
           rm -f external/openarm_description/COLCON_IGNORE \
+                external/franka_description/COLCON_IGNORE \
                 external/openarm_ros2/COLCON_IGNORE \
                 external/unitree_ros2/COLCON_IGNORE
           [ -d external/unitree_ros2/example/src ] && \

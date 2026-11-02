@@ -1,0 +1,59 @@
+# MoveIt Servo for the Panda panda_arm group — full 6-DOF Cartesian + joint jogging.
+#
+# Servo subscribes /joint_states from the sim (any backend), turns incoming
+# TwistStamped / JointJog commands into a streamed JointTrajectory, and publishes it
+# to the arm's JTC. Teleop inputs (Foxglove panel, joy, spacenav) publish onto the
+# delta command topics below.
+#
+# Seeded from moveit_servo's panda_simulated_config with fer_* frames. The arm is
+# 7-DOF, so it spans SE(3): arbitrary 6-DOF Cartesian twists are reachable. The hand
+# is not driven by Servo; panda_gripper_controller takes trajectory goals directly.
+moveit_servo:
+  use_gazebo: false
+  command_in_type: unitless  # [-1, 1] for joystick-style inputs
+
+  scale:
+    linear: 0.4       # m/s at unit command
+    rotational: 0.8   # rad/s at unit command
+    joint: 0.5        # rad/s at unit command
+
+  low_latency_mode: false
+  publish_period: 0.034  # ~30 Hz command stream
+
+  # Stream a JointTrajectory to the arm's joint_trajectory_controller.
+  command_out_type: trajectory_msgs/JointTrajectory
+  publish_joint_positions: true
+  publish_joint_velocities: false
+  publish_joint_accelerations: false
+
+  move_group_name: panda_arm
+  planning_frame: fer_link0
+  ee_frame_name: fer_hand_tcp
+  robot_link_command_frame: fer_link0
+
+  incoming_command_timeout: 0.1
+  joint_topic: /joint_states
+  status_topic: ~/status
+  cartesian_command_in_topic: ~/delta_twist_cmds
+  joint_command_in_topic: ~/delta_joint_cmds
+  command_out_topic: /panda_arm_controller/joint_trajectory
+
+  # Collision checking is OFF, matching every other robot here, so all arms jog under
+  # the same rules. The SRDF carries the MoveIt panda collision matrix, so enabling
+  # it is a one-line change once it is validated in sim. The thresholds below are
+  # retained for that.
+  check_collisions: false
+  collision_check_rate: 10.0
+  self_collision_proximity_threshold: 0.01
+  scene_collision_proximity_threshold: 0.02
+  collision_distance_safety_factor: 1000.0
+  min_allowable_collision_distance: 0.01
+
+  # Raised from the MoveIt Servo defaults (17 / 30) to widen the usable band before the
+  # singularity guard halts, as for the other arms. The ready pose sits well clear of
+  # a singularity; the trade-off is less-damped motion close to one — fine in sim.
+  lower_singularity_threshold: 30.0
+  hard_stop_singularity_threshold: 60.0
+  leaving_singularity_threshold_multiplier: 2.0
+
+  joint_limit_margin: 0.1

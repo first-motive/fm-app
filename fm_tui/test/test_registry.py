@@ -22,7 +22,7 @@ def test_robot_description_is_wired_with_robots():
     assert rd.wired
     assert rd.launch is not None
     assert rd.robots
-    assert {r.key for r in rd.robots} == {"g1_d", "so101", "openarm", "axol"}
+    assert {r.key for r in rd.robots} == {"g1_d", "so101", "openarm", "axol", "panda"}
 
 
 def test_autonomous_follows_the_policy_layer():
@@ -46,7 +46,7 @@ def test_simulation_is_wired_with_backends():
     assert entry.wired
     assert entry.has_backends
     assert not entry.has_modes
-    assert {r.key for r in entry.robots} == {"openarm", "so101", "g1_d", "axol"}
+    assert {r.key for r in entry.robots} == {"openarm", "so101", "g1_d", "axol", "panda"}
     assert "mujoco" in entry.backends
 
 
@@ -73,14 +73,14 @@ def test_leader_follower_mode_carries_its_session_launch():
     # A mode cannot pass a fixed launch argument, so the input lives in the launch file.
     lf = _mode("teleoperation", "leader_follower")
     assert lf.launch.launch_file == "leader_session.launch.py"
-    assert {r.key for r in lf.robots} == {"openarm", "so101", "g1_d", "axol"}
+    assert {r.key for r in lf.robots} == {"openarm", "so101", "g1_d", "axol", "panda"}
     assert "mujoco" in lf.backends
 
 
 def test_vr_mode_carries_its_session_launch():
     vr = _mode("teleoperation", "vr")
     assert vr.launch.launch_file == "vr_session.launch.py"
-    assert {r.key for r in vr.robots} == {"openarm", "so101", "g1_d", "axol"}
+    assert {r.key for r in vr.robots} == {"openarm", "so101", "g1_d", "axol", "panda"}
     assert "mujoco" in vr.backends
 
 

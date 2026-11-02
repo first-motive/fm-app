@@ -1,0 +1,68 @@
+# Panda controllers: joint_state_broadcaster + a 7-joint arm JTC + a hand JTC, plus an
+# inactive forward-position arm controller.
+#
+# Sim backends only (mock/mujoco/gazebo/isaac) — the Panda has no real backend here.
+# For mujoco/gazebo/isaac the sim process hosts the controller_manager and reads these
+# params; for mock a standalone ros2_control_node does. Controller names match
+# fm-sim's panda catalog. Joint names match franka_description's `fer` geometry:
+# fer_joint1..7 and fer_finger_joint1 (fer_finger_joint2 is its URDF mimic).
+controller_manager:
+  ros__parameters:
+    update_rate: 100  # Hz — matches the other robots; comfortable for CPU MuJoCo on a Mac
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    # Primary MoveIt Servo target: streams trajectory_msgs/JointTrajectory.
+    panda_arm_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+    # Alternative Servo target: std_msgs/Float64MultiArray straight to position.
+    # Loaded inactive; switch to it when Servo runs in forward-command mode.
+    panda_arm_forward_position_controller:
+      type: forward_command_controller/ForwardCommandController
+
+    # The hand is not driven by Servo; a JTC holds + accepts trajectory goals
+    # (fer_finger_joint1: 0.0 closed, 0.04 fully open).
+    panda_gripper_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+panda_arm_controller:
+  ros__parameters:
+    joints:
+      - fer_joint1
+      - fer_joint2
+      - fer_joint3
+      - fer_joint4
+      - fer_joint5
+      - fer_joint6
+      - fer_joint7
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+      - velocity
+    allow_nonzero_velocity_at_trajectory_end: true
+
+panda_arm_forward_position_controller:
+  ros__parameters:
+    joints:
+      - fer_joint1
+      - fer_joint2
+      - fer_joint3
+      - fer_joint4
+      - fer_joint5
+      - fer_joint6
+      - fer_joint7
+    interface_name: position
+
+panda_gripper_controller:
+  ros__parameters:
+    joints:
+      - fer_finger_joint1
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+      - velocity
+    allow_nonzero_velocity_at_trajectory_end: true
