@@ -106,8 +106,14 @@ jobs:
       - name: colcon test
         run: |
           source /opt/ros/humble/setup.bash
-          # Test only our packages — the built externals carry their own (upstream) tests.
-          colcon test --packages-select $(colcon list --names-only | grep '^fm_')
+          # Test only this repo's packages. The externals carry their own upstream
+          # tests, and the sibling repos' fm_* packages are tested in their own CI:
+          # fm-sim's target Jazzy only, so running them here on Humble fails on
+          # nothing fm-app changed.
+          # An empty selection would make colcon test every package, so refuse it.
+          mapfile -t packages < <(colcon list --names-only --base-paths src/fm-app)
+          [ "${#packages[@]}" -gt 0 ] || { echo "no fm-app packages found" >&2; exit 1; }
+          colcon test --packages-select "${packages[@]}"
           colcon test-result --verbose
 
       # fm-app had no smoke at all: the image build stood in as one, which proves the
