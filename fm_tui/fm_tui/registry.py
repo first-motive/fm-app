@@ -294,6 +294,12 @@ _ROBOTS = (
         variants=("bimanual",),
         default_variant="bimanual",
     ),
+    Robot(
+        key="panda",
+        label="Franka Panda",
+        variants=("panda",),
+        default_variant="panda",
+    ),
 )
 
 
@@ -325,6 +331,12 @@ _SIM_ROBOTS = (
         label="Almond Bot Axol",
         variants=("axol",),
         default_variant="axol",
+    ),
+    Robot(
+        key="panda",
+        label="Franka Panda",
+        variants=("panda",),
+        default_variant="panda",
     ),
 )
 _SIM_BACKENDS = ("mujoco", "mock", "gazebo", "isaac")

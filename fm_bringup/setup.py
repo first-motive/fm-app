@@ -28,6 +28,10 @@ setup(
             "share/" + package_name + "/config/axol",
             glob("config/axol/*.yaml") + glob("config/axol/*.srdf"),
         ),
+        (
+            "share/" + package_name + "/config/panda",
+            glob("config/panda/*.yaml") + glob("config/panda/*.srdf"),
+        ),
     ],
     install_requires=["setuptools"],
     zip_safe=True,

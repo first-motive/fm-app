@@ -2,13 +2,23 @@
 
 Build/SRDF processing (build_description, semantic) needs the full vendored
 description + MoveIt config on the share path, so it is exercised by the
-container build/smoke runs rather than here. These tests pin the data contract
-the launch files depend on.
+container build/smoke runs rather than here. The one exception is the Panda
+name cross-check, which builds the URDF and skips when franka_description is
+absent. These tests pin the data contract the launch files depend on.
 """
 
+import xml.etree.ElementTree as ET
+
 import pytest
+import yaml
+from ament_index_python.packages import PackageNotFoundError, get_package_share_directory
 
 from fm_bringup import registry
+
+
+def _load_yaml(path):
+    with open(path, "r") as handle:
+        return yaml.safe_load(handle)
 
 
 def test_get_openarm():
@@ -264,4 +274,110 @@ def test_axol_moveit_config_in_repo():
 
 
 def test_registered_robots():
-    assert {"openarm", "so101", "g1_d", "axol"} <= set(registry._ROBOTS)
+    assert {"openarm", "so101", "g1_d", "axol", "panda"} <= set(registry._ROBOTS)
+
+
+def test_get_panda():
+    spec = registry.get("panda")
+    assert spec.key == "panda"
+    assert spec.default_variant == "panda"
+    # Single fixed arm + hand configuration: no preset arg.
+    assert spec.preset_arg is None
+    # Arm + hand only — no base or hand adapter, so no remaps or teleop nodes.
+    assert spec.cmd_remaps == ()
+    assert spec.teleop_nodes == ()
+    assert [n for n, _ in spec.servo_nodes()] == ["servo_node"]
+
+
+def test_panda_controller_set():
+    # Names match fm-sim's panda catalog; the forward-position arm controller loads
+    # inactive, like the OpenArm's.
+    spec = registry.get("panda")
+    assert set(spec.controllers) == {"panda"}
+    assert spec.controllers["panda"]["active"] == [
+        "panda_arm_controller",
+        "panda_gripper_controller",
+    ]
+    assert spec.controllers["panda"]["inactive"] == [
+        "panda_arm_forward_position_controller"
+    ]
+    # Every spawned controller is defined in the file the controller_manager loads.
+    defined = _load_yaml(spec.controllers_file("panda"))["controller_manager"][
+        "ros__parameters"
+    ]
+    cset = spec.controllers["panda"]
+    assert set(cset["active"] + cset["inactive"]) <= set(defined)
+
+
+def test_panda_arm_controller_drives_the_fer_joints():
+    # Upstream names the Panda `fer`; the gripper JTC is excluded from the arm set.
+    arms = registry.get("panda").arm_controllers("panda")
+    assert arms == [
+        ("panda_arm_controller", [f"fer_joint{i}" for i in range(1, 8)])
+    ]
+
+
+def test_panda_real_is_not_a_cm_backend():
+    # Simulation-only robot: only mock uses a standalone controller_manager.
+    spec = registry.get("panda")
+    assert spec.standalone_cm_backends == frozenset({"mock"})
+
+
+def test_panda_mesh_rewrite_points_dae_visuals_at_fm_description_stl():
+    pattern, repl = registry.get("panda").mesh_rewrite
+    visual = 'filename="package://franka_description/meshes/robots/fer/visual/link0.dae"'
+    assert pattern.sub(repl, visual) == (
+        'filename="package://fm_description/panda_meshes/robots/fer/visual/link0.stl"'
+    )
+    collision = 'filename="package://franka_description/meshes/robots/fer/collision/link0.stl"'
+    assert pattern.sub(repl, collision) == collision
+
+
+def test_panda_moveit_config_in_repo():
+    spec = registry.get("panda")
+    assert spec.moveit_pkg == "fm_bringup"
+    srdf = spec.semantic("panda")  # resolves the in-repo SRDF without error
+    # Robot name must match the description's <robot name="panda">.
+    assert '<robot name="panda">' in srdf
+    assert spec.full_state_jsp is False
+
+
+def test_panda_configs_match_the_urdf():
+    # The panda configs are hand-renamed from the MoveIt panda (panda_*) to
+    # franka_description's fer_* names; cross-check every name against the built model.
+    try:
+        get_package_share_directory("franka_description")
+    except PackageNotFoundError:
+        pytest.skip("franka_description not installed")
+    spec = registry.get("panda")
+    urdf = ET.fromstring(spec.build_description("panda", "mock"))
+    links = {link.get("name") for link in urdf.findall("link")}
+    joints = {joint.get("name") for joint in urdf.findall("joint")}
+
+    srdf = ET.fromstring(spec.semantic("panda"))
+    assert srdf.get("name") == urdf.get("name") == "panda"
+    srdf_links, srdf_joints = set(), set()
+    for group in srdf.findall("group"):
+        srdf_links |= {e.get("name") for e in group.findall("link")}
+        srdf_joints |= {e.get("name") for e in group.findall("joint")}
+        for chain in group.findall("chain"):
+            srdf_links |= {chain.get("base_link"), chain.get("tip_link")}
+    for state in srdf.findall("group_state"):
+        srdf_joints |= {e.get("name") for e in state.findall("joint")}
+    for pair in srdf.findall("disable_collisions"):
+        srdf_links |= {pair.get("link1"), pair.get("link2")}
+    srdf_links |= {e.get("parent_link") for e in srdf.findall("end_effector")}
+    assert srdf_links - links == set()
+    assert srdf_joints - joints == set()
+
+    controllers = _load_yaml(spec.controllers_file("panda"))
+    for name, params in controllers.items():
+        if name == "controller_manager":
+            continue
+        assert set(params["ros__parameters"]["joints"]) <= joints, name
+    limits = _load_yaml(spec.moveit_file("joint_limits.yaml"))["joint_limits"]
+    assert set(limits) <= joints
+
+    servo = _load_yaml(spec.servo_params_file())["moveit_servo"]
+    for key in ("planning_frame", "robot_link_command_frame", "ee_frame_name"):
+        assert servo[key] in links, key
