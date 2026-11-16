@@ -291,8 +291,9 @@ _ROBOTS = (
     Robot(
         key="axol",
         label="Almond Bot Axol",
-        variants=("bimanual",),
-        default_variant="bimanual",
+        # view_robot's Axol variant is the upstream mount URDF (axol_<mount>.urdf).
+        variants=("ox_cart", "standalone"),
+        default_variant="ox_cart",
     ),
     Robot(
         key="panda",

@@ -48,12 +48,12 @@ _SO101_MESH_SUB = r'filename="package://fm_description/so101_description/assets/
 _G1_MESH_RE = re.compile(r'filename="meshes/')
 _G1_MESH_SUB = r'filename="package://fm_description/g1_d_description/meshes/'
 
-# The vendored Axol URDF references meshes as package://assembly/... (its Onshape
-# export package name). Rewrite the "assembly" package to fm_description/axol_description
+# The vendored Axol URDF (axol_ox_cart.urdf) names its meshes relative to its own file
+# (meshes/<mount>/...). Rewrite them to package://fm_description/axol_description/meshes/
 # so robot_state_publisher serves them to Foxglove — matching where fm_description
 # installs them and the _build_axol rewrite in view_robot.launch.py.
-_AXOL_MESH_RE = re.compile(r'filename="package://assembly/')
-_AXOL_MESH_SUB = r'filename="package://fm_description/axol_description/'
+_AXOL_MESH_RE = re.compile(r'filename="meshes/')
+_AXOL_MESH_SUB = r'filename="package://fm_description/axol_description/meshes/'
 
 # The Panda's franka_description visuals are .dae; fm_description converts them to
 # STL under panda_meshes/ (same tree). Rewrite like the OpenArm so Foxglove renders —
@@ -489,19 +489,25 @@ _ROBOTS = {
         config_dir="axol",
         controllers={
             "axol": {
+                # Servo streams each arm's trajectory controller; the forward position
+                # controllers (seven arm joints, then the finger) claim the same joints,
+                # so they load inactive.
                 "active": [
-                    "axol_right_arm_controller",
-                    "axol_left_arm_controller",
+                    "axol_right_jtc",
+                    "axol_left_jtc",
                 ],
-                "inactive": [],
+                "inactive": [
+                    "axol_right_forward_position_controller",
+                    "axol_left_forward_position_controller",
+                ],
             },
         },
         # Only mock needs a standalone controller_manager; mujoco/gazebo/isaac host their
-        # own. real is NOT here — Axol's CAN backend is deferred (no ros2_control plugin
-        # yet), so sim.launch serves the sim backends only.
+        # own. real is NOT here: the real Axol's controller_manager runs in fm-axol's robot
+        # container, and fm_bringup teleop on the real Axol is not built.
         standalone_cm_backends=frozenset({"mock"}),
         foxglove_params=DEFAULT_FOXGLOVE_PARAMS,
-        # Axol MoveIt config is authored in-repo (Humble, bimanual 2x7-DOF).
+        # Axol MoveIt config is authored in-repo (Humble, bimanual 2x7-DOF + fingers).
         moveit_pkg="fm_bringup",
         moveit_cfg=os.path.join("config", "axol"),
         servo_config="servo.yaml",
@@ -510,9 +516,10 @@ _ROBOTS = {
         # Second servo_node for the left arm: its own servo.yaml + delta topics under
         # /servo_node_left/ (the primary servo_node drives the right arm).
         extra_servo_configs=(("servo_node_left", "servo_left.yaml"),),
-        # Both arm controllers together claim all 14 revolute joints (the whole model),
-        # so no extra joint_state_publisher is needed (unlike the G1-D's arm subset).
-        full_state_jsp=False,
+        # No ros2_control system claims the ox_cart's lift (fm treats it as fixed), so the
+        # joint_state_publisher fills it at 0 (fully raised) and the planning scene
+        # completes.
+        full_state_jsp=True,
     ),
     "panda": RobotSpec(
         key="panda",

@@ -35,7 +35,7 @@ moveit_servo:
   status_topic: ~/status
   cartesian_command_in_topic: ~/delta_twist_cmds
   joint_command_in_topic: ~/delta_joint_cmds
-  command_out_topic: /axol_left_arm_controller/joint_trajectory
+  command_out_topic: /axol_left_jtc/joint_trajectory
 
   # Collision checking is OFF (see servo.yaml): each servo_node controls only its arm,
   # so arm-arm proximity would flood Servo with warnings no single-arm motion can clear.

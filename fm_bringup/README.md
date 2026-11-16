@@ -41,8 +41,9 @@ starts `robot_state_publisher` + `foxglove_bridge`, brings up the controller_man
 for the chosen backend, then spawns the controllers. The robot's
 `standalone_cm_backends` decides which backends need a standalone `ros2_control_node`
 (mock/real for OpenArm + SO101; mock only for the G1-D, whose real arm is a bridge,
-not a controller_manager, the Axol, whose real CAN backend is deferred — no
-ros2_control plugin yet, and the Panda, which is simulation-only); mujoco/gazebo host the controller_manager inside the sim;
+not a controller_manager, the Axol, whose real controller_manager runs in fm-axol's
+robot container, and the Panda, which is simulation-only); mujoco/gazebo host the
+controller_manager inside the sim;
 isaac bridges to an externally-running Isaac Sim over ROS topics.
 
 ```bash

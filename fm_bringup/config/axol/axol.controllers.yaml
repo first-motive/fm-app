@@ -1,10 +1,13 @@
-# Axol controllers: joint_state_broadcaster + a 7-joint JTC per arm.
+# Axol controllers: joint_state_broadcaster, a 7-joint JTC per arm, and a forward
+# position controller per arm (the seven arm joints, then the finger).
 #
-# Sim backends only (mock/mujoco/gazebo/isaac) — the real CAN backend is deferred.
-# For mujoco/gazebo/isaac the sim process hosts the controller_manager and reads
-# these params; for mock a standalone ros2_control_node does. Each arm controller
-# claims the 7 joints of its own axol_{left,right}_system in the description. Joint
-# names match the vendored axol.urdf exactly ({left,right}_{s1,s2,s3,e1,e2,w1,w2}_0).
+# Sim backends only (mock/mujoco/gazebo/isaac); the real Axol's controller_manager runs
+# in fm-axol's robot container. For mujoco/gazebo/isaac the sim process hosts the
+# controller_manager and reads these params; for mock a standalone ros2_control_node
+# does. Names and joints match fm-sim's axol controllers and fm-robot's
+# axol.ros2_control.xacro ({left,right}_{s1,s2,s3,e1,e2,w1,w2}_0 and
+# {left,right}_finger_1_joint; finger_2_joint mimics finger_1_joint). Each arm's JTC and
+# forward controller claim the same arm joints, so only one of the pair is active.
 controller_manager:
   ros__parameters:
     update_rate: 100  # Hz
@@ -13,13 +16,19 @@ controller_manager:
       type: joint_state_broadcaster/JointStateBroadcaster
 
     # Primary MoveIt Servo targets: each streams trajectory_msgs/JointTrajectory.
-    axol_right_arm_controller:
+    axol_right_jtc:
       type: joint_trajectory_controller/JointTrajectoryController
 
-    axol_left_arm_controller:
+    axol_left_jtc:
       type: joint_trajectory_controller/JointTrajectoryController
 
-axol_right_arm_controller:
+    axol_right_forward_position_controller:
+      type: position_controllers/JointGroupPositionController
+
+    axol_left_forward_position_controller:
+      type: position_controllers/JointGroupPositionController
+
+axol_right_jtc:
   ros__parameters:
     joints:
       - right_s1_0
@@ -36,7 +45,7 @@ axol_right_arm_controller:
       - velocity
     allow_nonzero_velocity_at_trajectory_end: true
 
-axol_left_arm_controller:
+axol_left_jtc:
   ros__parameters:
     joints:
       - left_s1_0
@@ -52,3 +61,28 @@ axol_left_arm_controller:
       - position
       - velocity
     allow_nonzero_velocity_at_trajectory_end: true
+
+# The finger is prismatic: metres, -0.044 to 0 (0 is the export's pose).
+axol_right_forward_position_controller:
+  ros__parameters:
+    joints:
+      - right_s1_0
+      - right_s2_0
+      - right_s3_0
+      - right_e1_0
+      - right_e2_0
+      - right_w1_0
+      - right_w2_0
+      - right_finger_1_joint
+
+axol_left_forward_position_controller:
+  ros__parameters:
+    joints:
+      - left_s1_0
+      - left_s2_0
+      - left_s3_0
+      - left_e1_0
+      - left_e2_0
+      - left_w1_0
+      - left_w2_0
+      - left_finger_1_joint
