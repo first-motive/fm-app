@@ -35,7 +35,7 @@ moveit_servo:
   status_topic: ~/status
   cartesian_command_in_topic: ~/delta_twist_cmds
   joint_command_in_topic: ~/delta_joint_cmds
-  command_out_topic: /axol_right_arm_controller/joint_trajectory
+  command_out_topic: /axol_right_jtc/joint_trajectory
 
   # Collision checking is OFF. Servo monitors the whole 14-joint model, but each
   # servo_node controls only its own arm; the other arm sits static at its pose and

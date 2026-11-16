@@ -223,13 +223,14 @@ def test_g1_d_moveit_config_in_repo():
     assert spec.semantic("g1_d")  # resolves the in-repo SRDF without error
 
 
-def test_full_state_jsp_only_for_subset_controlled_g1():
-    # The G1-D drives 7 of 34 joints, so it needs the joint_state_publisher; the
-    # OpenArm + SO101 + Axol control their whole model and must not.
+def test_full_state_jsp_where_joints_go_unclaimed():
+    # The G1-D drives 7 of 34 joints and the Axol leaves its cart's lift unclaimed, so
+    # both need the joint_state_publisher; the OpenArm + SO101 control their whole model
+    # and must not.
     assert registry.get("g1_d").full_state_jsp is True
+    assert registry.get("axol").full_state_jsp is True
     assert registry.get("openarm").full_state_jsp is False
     assert registry.get("so101").full_state_jsp is False
-    assert registry.get("axol").full_state_jsp is False
 
 
 def test_get_axol():
@@ -247,9 +248,33 @@ def test_axol_controller_set():
     spec = registry.get("axol")
     assert set(spec.controllers) == {"axol"}
     assert spec.controllers["axol"]["active"] == [
-        "axol_right_arm_controller",
-        "axol_left_arm_controller",
+        "axol_right_jtc",
+        "axol_left_jtc",
     ]
+    assert spec.controllers["axol"]["inactive"] == [
+        "axol_right_forward_position_controller",
+        "axol_left_forward_position_controller",
+    ]
+
+
+def test_axol_mesh_rewrite_follows_the_mount_urdf():
+    regex, repl = registry.get("axol").mesh_rewrite
+    rewritten = regex.sub(repl, '<mesh filename="meshes/ox_cart/cart_0.stl"/>')
+    assert rewritten == (
+        '<mesh filename="package://fm_description/axol_description/meshes/ox_cart/cart_0.stl"/>'
+    )
+
+
+def test_axol_forward_controllers_carry_the_arm_then_the_finger():
+    # fm-skills streams seven arm joints, then the finger, to each forward controller.
+    spec = registry.get("axol")
+    with open(spec.controllers_file("axol")) as controllers_file:
+        params = yaml.safe_load(controllers_file)
+    for side in ("left", "right"):
+        arm = params[f"axol_{side}_jtc"]["ros__parameters"]["joints"]
+        forward = params[f"axol_{side}_forward_position_controller"]["ros__parameters"]["joints"]
+        assert arm == [f"{side}_{j}_0" for j in ("s1", "s2", "s3", "e1", "e2", "w1", "w2")]
+        assert forward == arm + [f"{side}_finger_1_joint"]
 
 
 def test_axol_servo_nodes_one_per_arm():
@@ -261,7 +286,8 @@ def test_axol_servo_nodes_one_per_arm():
 
 
 def test_axol_real_is_not_a_cm_backend():
-    # Axol's CAN backend is deferred; only mock uses a standalone controller_manager.
+    # The real Axol's controller_manager runs in fm-axol's robot container; only mock
+    # uses a standalone controller_manager here.
     spec = registry.get("axol")
     assert spec.standalone_cm_backends == frozenset({"mock"})
     assert "real" not in spec.standalone_cm_backends

@@ -4,9 +4,11 @@ SRDF for the Almond Bot Axol arms (7-DOF each, left + right).
 
 MoveIt Servo needs an SRDF whose joints/links match the loaded model exactly, or the
 planning scene monitor waits forever ("complete state not known"). Each arm is a
-7-joint chain from the shared base to its gripper tip: joints {left,right}_{s1,s2,
-s3,e1,e2,w1,w2}_0. The grippers are fixed in the URDF (no DOF), so the tip link is
-rigid. Robot name axol matches the fm_control description so MoveIt accepts the pair.
+7-joint chain from the shared base to its gripper link: joints {left,right}_{s1,s2,
+s3,e1,e2,w1,w2}_0. The description is Almond's axol_ox_cart.urdf: each gripper carries
+a prismatic finger pair ({left,right}_finger_1_joint, finger_2_joint its mimic) below
+the tip link, outside the arm groups, and the cart's lift is passive (fm treats it as
+fixed). Robot name axol matches the fm_control description so MoveIt accepts the pair.
 
 Each arm is 7-DOF, so it spans SE(3): Servo drives full 6-DOF Cartesian twists (no
 reduced-DOF caveat, unlike the SO101). One servo_node per arm group (see servo.yaml /
@@ -41,11 +43,19 @@ servo_left.yaml); arm-arm collision is not guarded, so operator caution is requi
         <joint name="left_w2_0" value="0"/>
     </group_state>
 
+    <!-- The cart's lift: no ros2_control system claims it, so MoveIt never plans it. -->
+    <passive_joint name="lift"/>
+
     <!-- Adjacent link pairs along each chain (URDF parent/child), plus the shared
-         spine (root->base->s1). Servo runs with check_collisions off, so these keep
-         the planning scene from flagging permanent self-contact. -->
+         spine (cart->root->base->s1) and the parts fixed to it. Servo runs with
+         check_collisions off, so these keep the planning scene from flagging
+         permanent self-contact. -->
+    <disable_collisions link1="cart" link2="base" reason="Adjacent"/>
     <disable_collisions link1="root" link2="base" reason="Adjacent"/>
     <disable_collisions link1="base" link2="s1" reason="Adjacent"/>
+    <disable_collisions link1="base" link2="lift_plate" reason="Adjacent"/>
+    <disable_collisions link1="lift_plate" link2="s1" reason="Adjacent"/>
+    <disable_collisions link1="s1" link2="head" reason="Adjacent"/>
 
     <disable_collisions link1="s1" link2="right_s2" reason="Adjacent"/>
     <disable_collisions link1="right_s2" link2="right_s3" reason="Adjacent"/>
@@ -55,6 +65,10 @@ servo_left.yaml); arm-arm collision is not guarded, so operator caution is requi
     <disable_collisions link1="right_w0" link2="right_w1" reason="Adjacent"/>
     <disable_collisions link1="right_w1" link2="right_w2" reason="Adjacent"/>
     <disable_collisions link1="right_w2" link2="right_gripper" reason="Adjacent"/>
+    <disable_collisions link1="right_gripper" link2="right_finger_1" reason="Adjacent"/>
+    <disable_collisions link1="right_gripper" link2="right_finger_2" reason="Adjacent"/>
+    <disable_collisions link1="right_finger_1" link2="right_finger_2" reason="Never"/>
+    <disable_collisions link1="right_gripper" link2="right_wrist_camera" reason="Adjacent"/>
 
     <disable_collisions link1="s1" link2="left_s2" reason="Adjacent"/>
     <disable_collisions link1="left_s2" link2="left_s3" reason="Adjacent"/>
@@ -64,4 +78,8 @@ servo_left.yaml); arm-arm collision is not guarded, so operator caution is requi
     <disable_collisions link1="left_w0" link2="left_w1" reason="Adjacent"/>
     <disable_collisions link1="left_w1" link2="left_w2" reason="Adjacent"/>
     <disable_collisions link1="left_w2" link2="left_gripper" reason="Adjacent"/>
+    <disable_collisions link1="left_gripper" link2="left_finger_1" reason="Adjacent"/>
+    <disable_collisions link1="left_gripper" link2="left_finger_2" reason="Adjacent"/>
+    <disable_collisions link1="left_finger_1" link2="left_finger_2" reason="Never"/>
+    <disable_collisions link1="left_gripper" link2="left_wrist_camera" reason="Adjacent"/>
 </robot>

@@ -53,7 +53,7 @@ repositories:
   external/axol:
     type: git
     url: https://github.com/almond-bot/axol.git
-    version: ca5de52e5938c6bb174782dd5d504f8d6ec07662
+    version: 021eb965551287f30364f6d753e1cbe81e509f25
   external/openarm_mujoco:
     type: git
     url: https://github.com/enactic/openarm_mujoco.git
